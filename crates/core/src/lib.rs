@@ -12,11 +12,19 @@
 //! - [`constants`]  default values for those settings
 //! - [`geometry`]   distance maths for the wrap-around world
 //! - [`swarm_init`] builds the starting swarm
+//! - [`neighbours`] finds the agents near an agent
+//! - [`steering`]   the three rules that make a flock
+//! - [`simulation`] moves the whole swarm forward one step
+//! - [`metrics`]    numbers describing the swarm as a whole
 
 pub mod agent;
 pub mod constants;
 pub mod geometry;
+pub mod metrics;
+pub mod neighbours;
 pub mod params;
+pub mod simulation;
+pub mod steering;
 pub mod swarm_init;
 pub mod vector2d;
 
@@ -24,5 +32,9 @@ pub use agent::Agent;
 pub use constants::*;
 pub use geometry::{toroidal_delta, wrap};
 pub use params::Params;
-pub use swarm_init::lattice_swarm;
+pub use metrics::polarisation;
+pub use neighbours::{Neighbour, find_neighbours};
+pub use simulation::{run, step};
+pub use steering::{alignment, cohesion, separation, steer};
+pub use swarm_init::{lattice_swarm, scattered_swarm};
 pub use vector2d::Vector2D;

@@ -32,6 +32,30 @@ impl Vector2D {
     pub fn len_sq(self) -> f64 {
         self.x * self.x + self.y * self.y
     }
+
+    /// Same direction, length 1.
+    ///
+    /// A zero vector has no direction, so it stays zero rather than blowing up
+    /// into infinity.
+    pub fn normalised(self) -> Vector2D {
+        let length = self.len();
+        if length == 0.0 {
+            Vector2D::ZERO
+        } else {
+            Vector2D::new(self.x / length, self.y / length)
+        }
+    }
+
+    /// Same direction, but no longer than `limit`. Shorter vectors are left
+    /// alone.
+    pub fn clamped_to(self, limit: f64) -> Vector2D {
+        let length = self.len();
+        if length > limit {
+            self.normalised() * limit
+        } else {
+            self
+        }
+    }
 }
 
 impl std::ops::Add for Vector2D {
