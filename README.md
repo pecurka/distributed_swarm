@@ -53,16 +53,24 @@ runs.
 
 ## Status
 
-Early. Toolchain and skeleton in place; no simulation logic yet.
+The sequential baseline works. Nothing is distributed yet — `swarm-dist`
+currently only checks that the MPI toolchain functions.
 
 - [x] Toolchain verified — ranks start, exchange with neighbours, and synchronise
 - [x] Core model types — vectors, agents, parameters, toroidal geometry
-- [ ] Sequential baseline (uniform grid + steering rules)
+- [x] Sequential baseline — steering rules, uniform grid, deterministic setup
+- [x] Visualisation — record a run to CSV, draw it as a page or an SVG
 - [ ] Single-node multi-process version
 - [ ] Ghost-cell exchange + agent migration
 - [ ] Fidelity comparison against the baseline
 - [ ] Benchmark harness
 - [ ] Scaling measurements
+
+The uniform grid is checked against the every-agent-against-every-agent search:
+both must produce bit-identical results, step after step. The slow version stays
+in the codebase as that checker and is never what speed is measured against —
+comparing to it would report replacing a bad algorithm as if it were a gain from
+spreading the work out.
 
 ## Repository layout
 
@@ -73,12 +81,20 @@ itself.
 
 ```
 Cargo.toml       workspace
-crates/core/     the model: vectors, agents, parameters, toroidal geometry
+crates/core/     the model — one file per idea:
+                   vector2d, agent, params, constants   the pieces
+                   geometry                             wrap-around distances
+                   neighbours                           the slow, obvious search
+                   grid                                 the fast search
+                   steering, simulation                 the three rules, one step
+                   metrics, report, recording           measuring and reporting
 crates/seq/      sequential baseline
 crates/dist/     distributed runner (MPI, via rsmpi)
 bench/           benchmark configurations and run scripts
-data/            raw measurement output (committed — results are reproducible)
-analysis/        plot and table generation
+data/            recorded runs. Demo output is ignored by git; real measurement
+                 results are added deliberately with `git add -f`, so every
+                 figure can be traced to the run that produced it
+analysis/        render.py — turns a recorded run into a page or an SVG
 ```
 
 ## Building and running
