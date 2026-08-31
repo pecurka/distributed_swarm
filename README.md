@@ -42,9 +42,11 @@ runs.
 
 ## Status
 
-Early. Design chapter in progress; implementation not yet started.
+Early. Toolchain and skeleton in place; no simulation logic yet.
 
-- [ ] Sequential baseline (uniform grid)
+- [x] Toolchain verified — ranks start, exchange with neighbours, and synchronise
+- [x] Core model types — vectors, agents, parameters, toroidal geometry
+- [ ] Sequential baseline (uniform grid + steering rules)
 - [ ] Single-node multi-process version
 - [ ] Ghost-cell exchange + agent migration
 - [ ] Fidelity comparison against the baseline
@@ -53,18 +55,47 @@ Early. Design chapter in progress; implementation not yet started.
 
 ## Repository layout
 
-<!-- TODO: fill in once the implementation language and structure -->
+A Cargo workspace of three crates. `core` holds everything both runners share
+and knows nothing about MPI — that is what lets the two executions run identical
+model code, so any difference in their results comes from the distribution
+itself.
 
 ```
-src/          implementation
-bench/        benchmark configurations and run scripts
-data/         raw measurement output (committed — results are reproducible)
-analysis/     plot and table generation
+Cargo.toml       workspace
+crates/core/     the model: vectors, agents, parameters, toroidal geometry
+crates/seq/      sequential baseline
+crates/dist/     distributed runner (MPI, via rsmpi)
+bench/           benchmark configurations and run scripts
+data/            raw measurement output (committed — results are reproducible)
+analysis/        plot and table generation
 ```
 
 ## Building and running
 
-<!-- TODO -->
+Requires Rust and an MPI implementation. On macOS:
+
+```bash
+brew install open-mpi
+```
+
+Then:
+
+```bash
+cargo build --release
+cargo test --workspace
+
+cargo run --release -p swarm-seq          # sequential, default swarm size
+cargo run --release -p swarm-seq -- 500   # sequential, 500 agents
+
+mpirun -n 4 ./target/release/swarm-dist   # distributed, 4 ranks
+```
+
+`--release` matters for anything you intend to measure. The distributed binary
+must be launched through `mpirun` rather than `cargo run`, since `mpirun` starts
+one copy of the executable per rank.
+
+Note that `cargo test` does not cover `swarm-dist` — its checks only run under
+`mpirun`, so run that separately.
 
 ## Reproducing the measurements
 

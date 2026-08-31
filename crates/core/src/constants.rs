@@ -38,7 +38,7 @@ pub const DEFAULT_WEIGHT_COHESION: f64 = 1.0;
 pub const DEFAULT_MAX_SPEED: f64 = 4.0;
 
 /// How much time one step covers.
-pub const DEFAULT_DT: f64 = 1.0;
+pub const DEFAULT_TIMESTEP: f64 = 1.0;
 
 /// The velocity every agent starts with.
 pub const INITIAL_VELOCITY: Vector2D = Vector2D::new(1.0, 0.5);

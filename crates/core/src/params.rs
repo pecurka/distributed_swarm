@@ -2,7 +2,7 @@
 
 use crate::Vector2D;
 use crate::constants::{
-    DEFAULT_DT, DEFAULT_MAX_SPEED, DEFAULT_PERCEPTION_RADIUS, DEFAULT_WEIGHT_ALIGNMENT,
+    DEFAULT_TIMESTEP, DEFAULT_MAX_SPEED, DEFAULT_PERCEPTION_RADIUS, DEFAULT_WEIGHT_ALIGNMENT,
     DEFAULT_WEIGHT_COHESION, DEFAULT_WEIGHT_SEPARATION, DEFAULT_WORLD,
 };
 
@@ -21,7 +21,7 @@ pub struct Params {
     pub weight_alignment: f64,
     pub weight_cohesion: f64,
     pub max_speed: f64,
-    pub dt: f64,
+    pub timestep: f64,
 }
 
 impl Default for Params {
@@ -33,7 +33,7 @@ impl Default for Params {
             weight_alignment: DEFAULT_WEIGHT_ALIGNMENT,
             weight_cohesion: DEFAULT_WEIGHT_COHESION,
             max_speed: DEFAULT_MAX_SPEED,
-            dt: DEFAULT_DT,
+            timestep: DEFAULT_TIMESTEP,
         }
     }
 }

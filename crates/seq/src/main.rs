@@ -29,7 +29,7 @@ fn main() {
         params.weight_separation, params.weight_alignment, params.weight_cohesion
     );
     println!("  max speed         {}", params.max_speed);
-    println!("  dt                {}", params.dt);
+    println!("  timestep          {}", params.timestep);
     println!();
     println!("first agent: {:?}", agents[0]);
     println!("last  agent: {:?}", agents[agents.len() - 1]);
