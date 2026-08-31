@@ -1,6 +1,6 @@
 //! Moving the whole swarm forward one step.
 
-use crate::{Agent, Params, find_neighbours, steer, wrap};
+use crate::{Agent, Grid, Params, find_neighbours, steer, wrap};
 
 /// Work out where every agent goes next.
 ///
@@ -13,6 +13,37 @@ use crate::{Agent, Params, find_neighbours, steer, wrap};
 ///
 /// Returning a fresh list rather than editing in place is what enforces that.
 pub fn step(agents: &[Agent], params: &Params) -> Vec<Agent> {
+    // Built once for the whole swarm, not once per agent.
+    let grid = Grid::build(agents, params);
+    agents
+        .iter()
+        .map(|agent| {
+            let neighbours = grid.neighbours_of(agent, agents, params);
+            let acceleration = steer(&neighbours, agent.velocity, params);
+
+            let velocity =
+                (agent.velocity + acceleration * params.timestep).clamped_to(params.max_speed);
+            let position = wrap(agent.position + velocity * params.timestep, params.world);
+
+            Agent {
+                id: agent.id,
+                position,
+                velocity,
+            }
+        })
+        .collect()
+}
+
+/// The same step, done the slow and obvious way.
+///
+/// Compares every agent against every other one instead of using the grid.
+/// Kept as a checker, not as something to measure speed against: comparing the
+/// distributed version to this would report "we replaced a bad algorithm" as if
+/// it were "spreading the work made us faster".
+///
+/// It is simple enough to trust, so when [`step`] disagrees with it, [`step`]
+/// is wrong.
+pub fn step_slowly(agents: &[Agent], params: &Params) -> Vec<Agent> {
     agents
         .iter()
         .map(|agent| {
