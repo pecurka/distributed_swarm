@@ -1,5 +1,11 @@
 # Rust
 /target/
 
+# Recorded runs and viewer pages. These are demo output — regenerate them with
+# --dump and analysis/render.py. Real measurement results get added on purpose
+# with `git add -f`.
+data/*.csv
+data/*.html
+
 # macOS
 .DS_Store

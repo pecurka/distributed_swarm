@@ -10,6 +10,17 @@ parallel, but in practice it isn't. Moving the simulation from one machine to a 
 This repository contains the implementation and the measurement harness for a
 bachelor thesis on that question.
 
+<img src="images/flocking-animated.svg" width="440" alt="250 boids scattering, then forming flocks">
+
+250 agents over 600 steps, looping. Colour is direction, so a flock shows up as
+a patch of one colour: they start scattered and heading everywhere, then clump
+into groups that move together. Agents crossing an edge reappear on the other
+side — the world wraps around.
+
+![A longer run as still frames](images/flocking.svg)
+
+The same thing as still frames, with 600 agents.
+
 ## Research questions
 
 1. **Fidelity** - does the distributed simulation reproduce the same emergent
@@ -84,11 +95,34 @@ Then:
 cargo build --release
 cargo test --workspace
 
-cargo run --release -p swarm-seq          # sequential, default swarm size
-cargo run --release -p swarm-seq -- 500   # sequential, 500 agents
+cargo run --release -p swarm-seq                # default: 1000 agents, 600 steps
+cargo run --release -p swarm-seq -- 500 300     # 500 agents, 300 steps
 
-mpirun -n 4 ./target/release/swarm-dist   # distributed, 4 ranks
+mpirun -n 4 ./target/release/swarm-dist         # distributed, 4 ranks
 ```
+
+### Watching a run
+
+The simulation can save agent positions to a file, and a separate script turns
+that into something you can look at. Recording is off unless you ask for it, so
+runs whose speed matters write nothing.
+
+```bash
+# run and record every 5th step
+cargo run --release -p swarm-seq -- 800 600 --dump data/run.csv --every 5
+
+# an interactive page: play, pause, scrub through the run
+python3 analysis/render.py data/run.csv data/run.html
+open data/run.html
+
+# or still frames, for putting in a document
+python3 analysis/render.py data/run.csv --svg images/run.svg
+```
+
+The renderer uses nothing outside Python's standard library, so there is
+nothing to install. The interactive page carries all its data inside it — one
+file, works offline, but it grows with agents times frames, so use a larger
+`--every` for long runs.
 
 `--release` matters for anything you intend to measure. The distributed binary
 must be launched through `mpirun` rather than `cargo run`, since `mpirun` starts

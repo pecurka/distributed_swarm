@@ -42,7 +42,18 @@ pub const DEFAULT_WORLD: Vector2D = Vector2D::new(1000.0, 1000.0);
 /// flock is not worth measuring.
 pub const DEFAULT_PERCEPTION_RADIUS: f64 = 50.0;
 
-// --- Steering weights -------------------------------------------------------
+/// How close is too close (the range of the "push away" rule).
+///
+/// Separation is deliberately short-range, while the other two rules use the
+/// full perception radius. Without that split the flock does not form: an agent
+/// pushing away from everything it can see always beats the pull toward the
+/// group, and the swarm settles into an evenly spaced grid — perfectly aligned,
+/// perfectly spread out, and nothing like a flock.
+///
+/// Set to roughly a third of the perception radius, which is the usual ratio.
+pub const DEFAULT_SEPARATION_RADIUS: f64 = 15.0;
+
+// --- Steering weights ---
 //
 // How strongly each of the three rules pulls. Their sizes *relative to each
 // other* give the flock its character. Their size *overall* decides how twitchy
@@ -50,31 +61,30 @@ pub const DEFAULT_PERCEPTION_RADIUS: f64 = 50.0;
 //
 // These started at 1.5 / 1.0 / 1.0 and were divided by ten. At the original
 // values an agent's velocity could swing by 3.5 in a single step, out of a
-// maximum speed of 4 — agents were thrown about every step and never settled.
-// The symptom was specific: even agents right next to each other did not agree
-// on a direction.
+// maximum speed of 4 — agents were thrown about every step and never settled,
+// and even agents right next to each other did not agree on a direction.
 //
-// Measured after 600 steps with 1000 agents, keeping the 1.5 : 1 : 1 ratio and
+// Measured after 600 steps with 800 agents, keeping the 1.5 : 1 : 1 ratio and
 // scaling all three together. "nearby" is how well an agent matches the agents
-// it can actually see; "overall" is how well the whole swarm moves as one.
-// Both run from 0 (no agreement) to 1 (perfect).
+// it can actually see; "overall" is how well the entire swarm moves as one.
+// Both run from 0 to 1.
 //
-//     scale   biggest change per step   nearby   overall
-//      1.00            3.50              0.43      0.17
-//      0.50            1.75              0.89      0.87
-//      0.25            0.88              0.94      0.91
-//      0.10            0.35              0.95      0.94   <- chosen
-//      0.05            0.18              0.99      0.98
-//      0.02            0.07              0.95      0.26
+//     scale   biggest change per step   neighbours   nearby   overall
+//      1.00            3.50                 99        0.80     0.41
+//      0.50            1.75                 80        0.97     0.65
+//      0.25            0.88                 69        0.94     0.48
+//      0.10            0.35                 48        1.00     0.49   <- chosen
+//      0.05            0.18                 37        0.99     0.16
+//      0.02            0.07                 34        0.99     0.16
 //
-// Anything between 0.05 and 0.25 flocks properly. 0.10 was picked as the middle
-// of that range, comfortably clear of both edges.
+// Read the "nearby" column, not "overall". Several separate flocks normally
+// form, each tidy inside but heading its own way, which drags the overall
+// number down without anything being wrong. A low overall number with a high
+// nearby number means multiple flocks; low on both means the model is broken.
 //
-// The last row is worth understanding rather than dismissing. Agents still
-// agree with their neighbours, but the swarm as a whole does not line up: the
-// steering is so gentle that lots of small tidy flocks form and never merge
-// within 600 steps. A low overall number does not by itself mean the
-// simulation is broken — always check the nearby number too.
+// (An earlier version of this table was measured before separation was made
+// short-range. Those numbers described a swarm that never really flocked, so
+// they have been replaced rather than kept for comparison.)
 
 /// How strongly agents push away from each other. Higher spreads the flock out,
 /// lower packs it together.

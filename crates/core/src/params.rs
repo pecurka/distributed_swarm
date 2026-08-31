@@ -2,8 +2,8 @@
 
 use crate::Vector2D;
 use crate::constants::{
-    DEFAULT_TIMESTEP, DEFAULT_MAX_SPEED, DEFAULT_PERCEPTION_RADIUS, DEFAULT_WEIGHT_ALIGNMENT,
-    DEFAULT_WEIGHT_COHESION, DEFAULT_WEIGHT_SEPARATION, DEFAULT_WORLD,
+    DEFAULT_MAX_SPEED, DEFAULT_PERCEPTION_RADIUS, DEFAULT_SEPARATION_RADIUS, DEFAULT_TIMESTEP,
+    DEFAULT_WEIGHT_ALIGNMENT, DEFAULT_WEIGHT_COHESION, DEFAULT_WEIGHT_SEPARATION, DEFAULT_WORLD,
 };
 
 /// Simulation settings.
@@ -17,6 +17,9 @@ pub struct Params {
     /// How far an agent can see (`r`). Also the smallest the shared border
     /// between nodes is allowed to be.
     pub perception_radius: f64,
+    /// How close is too close. Only neighbours nearer than this get pushed
+    /// away from; the other two rules use the full perception radius.
+    pub separation_radius: f64,
     pub weight_separation: f64,
     pub weight_alignment: f64,
     pub weight_cohesion: f64,
@@ -29,6 +32,7 @@ impl Default for Params {
         Self {
             world: DEFAULT_WORLD,
             perception_radius: DEFAULT_PERCEPTION_RADIUS,
+            separation_radius: DEFAULT_SEPARATION_RADIUS,
             weight_separation: DEFAULT_WEIGHT_SEPARATION,
             weight_alignment: DEFAULT_WEIGHT_ALIGNMENT,
             weight_cohesion: DEFAULT_WEIGHT_COHESION,

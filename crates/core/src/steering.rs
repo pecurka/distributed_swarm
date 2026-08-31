@@ -33,15 +33,21 @@ fn direction_of(total: Vector2D, combined_size: f64) -> Vector2D {
 
 /// Steer away from anyone too close.
 ///
-/// Closer neighbours push harder: each one contributes a push of size
-/// 1 / distance, so someone right next to you matters far more than someone at
-/// the edge of your vision.
-pub fn separation(neighbours: &[Neighbour]) -> Vector2D {
+/// Only neighbours nearer than `separation_radius` count. This rule is
+/// deliberately short-range while the other two use the full perception radius.
+/// If it reached as far as they do, an agent would push away from everything it
+/// can see, which always beats the pull toward the group: the swarm ends up
+/// evenly spaced instead of flocked.
+///
+/// Among those close neighbours, closer ones push harder — each contributes a
+/// push of size 1 / distance.
+pub fn separation(neighbours: &[Neighbour], separation_radius: f64) -> Vector2D {
+    let too_close = separation_radius * separation_radius;
     let mut push = Vector2D::ZERO;
     let mut combined_size = 0.0;
     for neighbour in neighbours {
         let distance_squared = neighbour.offset.len_sq();
-        if distance_squared > 0.0 {
+        if distance_squared > 0.0 && distance_squared <= too_close {
             // Away from them, divided by distance squared: direction over
             // distance, so the push shrinks as they get further away.
             let contribution = neighbour.offset * (-1.0 / distance_squared);
@@ -89,7 +95,7 @@ pub fn cohesion(neighbours: &[Neighbour]) -> Vector2D {
 /// An agent with no neighbours gets zero from all three and simply carries on
 /// in the direction it was already going.
 pub fn steer(neighbours: &[Neighbour], own_velocity: Vector2D, params: &Params) -> Vector2D {
-    separation(neighbours) * params.weight_separation
+    separation(neighbours, params.separation_radius) * params.weight_separation
         + alignment(neighbours, own_velocity) * params.weight_alignment
         + cohesion(neighbours) * params.weight_cohesion
 }
@@ -110,7 +116,7 @@ mod tests {
     fn separation_points_away_from_a_close_neighbour() {
         // Neighbour is to the right, so we should be pushed left.
         let neighbours = vec![neighbour_at(1, Vector2D::new(2.0, 0.0), Vector2D::ZERO)];
-        assert_eq!(separation(&neighbours), Vector2D::new(-1.0, 0.0));
+        assert_eq!(separation(&neighbours, 50.0), Vector2D::new(-1.0, 0.0));
     }
 
     #[test]
@@ -121,7 +127,7 @@ mod tests {
             neighbour_at(1, Vector2D::new(1.0, 0.0), Vector2D::ZERO),
             neighbour_at(2, Vector2D::new(-15.0, 0.0), Vector2D::ZERO),
         ];
-        assert!(separation(&neighbours).x < 0.0);
+        assert!(separation(&neighbours, 50.0).x < 0.0);
     }
 
     #[test]
@@ -150,7 +156,7 @@ mod tests {
     fn every_rule_is_silent_with_no_neighbours() {
         let params = Params::default();
         let own_velocity = Vector2D::new(1.0, 1.0);
-        assert_eq!(separation(&[]), Vector2D::ZERO);
+        assert_eq!(separation(&[], 50.0), Vector2D::ZERO);
         assert_eq!(alignment(&[], own_velocity), Vector2D::ZERO);
         assert_eq!(cohesion(&[]), Vector2D::ZERO);
         assert_eq!(steer(&[], own_velocity, &params), Vector2D::ZERO);
@@ -162,7 +168,7 @@ mod tests {
         // themselves must not vary in strength.
         let neighbours = vec![neighbour_at(1, Vector2D::new(4.0, 3.0), Vector2D::new(0.0, 1.0))];
         for direction in [
-            separation(&neighbours),
+            separation(&neighbours, 50.0),
             alignment(&neighbours, Vector2D::new(1.0, 0.0)),
             cohesion(&neighbours),
         ] {
