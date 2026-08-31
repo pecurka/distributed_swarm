@@ -7,7 +7,10 @@
 
 use std::path::PathBuf;
 
-use swarm_core::{DEFAULT_SWARM_SIZE, Params, Recorder, polarisation, scattered_swarm, step};
+use swarm_core::{
+    DEFAULT_SWARM_SIZE, Params, Recorder, configuration_report, local_alignment, polarisation,
+    progress_heading, progress_line, scattered_swarm, step,
+};
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
 const ARG_SWARM_SIZE: usize = 1;
@@ -39,26 +42,24 @@ fn main() {
         recorder
     });
 
-    println!("distributed_swarm — sequential baseline");
-    println!("  agents            {}", agents.len());
-    println!("  steps             {steps}");
     println!(
-        "  world             {} x {} (wraps around)",
-        params.world.x, params.world.y
+        "{}",
+        configuration_report("sequential baseline", agents.len(), steps, &params)
     );
-    println!("  perception radius {}", params.perception_radius);
-    println!(
-        "  weights           separation {} alignment {} cohesion {}",
-        params.weight_separation, params.weight_alignment, params.weight_cohesion
-    );
-    println!("  max speed         {}", params.max_speed);
-    println!("  timestep          {}", params.timestep);
     println!();
-    println!("  step   flocking");
-    println!("     0   {:.3}", polarisation(&agents));
+
+    // Two numbers, not one. See `progress_line` for why reading only the
+    // overall figure is misleading.
+    println!("{}", progress_heading());
+    println!(
+        "{}",
+        progress_line(0, local_alignment(&agents, &params), polarisation(&agents))
+    );
 
     if let Some(recorder) = recorder.as_mut() {
-        recorder.record(0, &agents).expect("could not record step 0");
+        recorder
+            .record(0, &agents)
+            .expect("could not record step 0");
     }
 
     for current_step in 1..=steps {
@@ -70,7 +71,17 @@ fn main() {
                 .expect("could not record a step");
         }
         if current_step % REPORT_EVERY == 0 || current_step == steps {
-            println!("  {current_step:>4}   {:.3}", polarisation(&agents));
+            // `local_alignment` searches for every agent's neighbours, so it
+            // costs about as much as a simulation step. Fine every 50 steps
+            // now, but it must stay outside anything we time later.
+            println!(
+                "{}",
+                progress_line(
+                    current_step,
+                    local_alignment(&agents, &params),
+                    polarisation(&agents)
+                )
+            );
         }
     }
 

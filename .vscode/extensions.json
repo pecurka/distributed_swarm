@@ -1,0 +1,8 @@
+{
+  // VS Code offers to install these when the project is opened.
+  "recommendations": [
+    // The Rust language server: inline errors, types, autocomplete,
+    // go-to-definition. This is the one that matters.
+    "rust-lang.rust-analyzer"
+  ]
+}

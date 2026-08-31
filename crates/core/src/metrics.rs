@@ -134,8 +134,16 @@ mod tests {
             ..Params::default()
         };
         let agents = vec![
-            Agent { id: 0, position: Vector2D::new(50.0, 50.0), velocity: Vector2D::new(1.0, 0.0) },
-            Agent { id: 1, position: Vector2D::new(55.0, 50.0), velocity: Vector2D::new(3.0, 0.0) },
+            Agent {
+                id: 0,
+                position: Vector2D::new(50.0, 50.0),
+                velocity: Vector2D::new(1.0, 0.0),
+            },
+            Agent {
+                id: 1,
+                position: Vector2D::new(55.0, 50.0),
+                velocity: Vector2D::new(3.0, 0.0),
+            },
         ];
         assert!((local_alignment(&agents, &params) - 1.0).abs() < 1e-12);
     }
@@ -150,9 +158,21 @@ mod tests {
             ..Params::default()
         };
         let agents = vec![
-            Agent { id: 0, position: Vector2D::new(50.0, 50.0), velocity: Vector2D::new(1.0, 0.0) },
-            Agent { id: 1, position: Vector2D::new(55.0, 50.0), velocity: Vector2D::new(1.0, 0.0) },
-            Agent { id: 2, position: Vector2D::new(900.0, 900.0), velocity: Vector2D::new(0.0, 1.0) },
+            Agent {
+                id: 0,
+                position: Vector2D::new(50.0, 50.0),
+                velocity: Vector2D::new(1.0, 0.0),
+            },
+            Agent {
+                id: 1,
+                position: Vector2D::new(55.0, 50.0),
+                velocity: Vector2D::new(1.0, 0.0),
+            },
+            Agent {
+                id: 2,
+                position: Vector2D::new(900.0, 900.0),
+                velocity: Vector2D::new(0.0, 1.0),
+            },
         ];
         assert!((local_alignment(&agents, &params) - 1.0).abs() < 1e-12);
     }
@@ -165,9 +185,21 @@ mod tests {
             ..Params::default()
         };
         let agents = vec![
-            Agent { id: 0, position: Vector2D::new(50.0, 50.0), velocity: Vector2D::ZERO },
-            Agent { id: 1, position: Vector2D::new(55.0, 50.0), velocity: Vector2D::ZERO },
-            Agent { id: 2, position: Vector2D::new(900.0, 900.0), velocity: Vector2D::ZERO },
+            Agent {
+                id: 0,
+                position: Vector2D::new(50.0, 50.0),
+                velocity: Vector2D::ZERO,
+            },
+            Agent {
+                id: 1,
+                position: Vector2D::new(55.0, 50.0),
+                velocity: Vector2D::ZERO,
+            },
+            Agent {
+                id: 2,
+                position: Vector2D::new(900.0, 900.0),
+                velocity: Vector2D::ZERO,
+            },
         ];
         assert_eq!(neighbour_counts(&agents, &params), vec![1, 1, 0]);
         assert!((average_neighbour_count(&agents, &params) - 2.0 / 3.0).abs() < 1e-12);

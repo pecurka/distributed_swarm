@@ -102,11 +102,8 @@ mod tests {
         let world = Vector2D::new(100.0, 60.0);
         for offset_x in [0.0, 1.0, 25.0, 50.0, 75.0, 99.0] {
             for offset_y in [0.0, 5.0, 30.0, 59.0] {
-                let delta = toroidal_delta(
-                    Vector2D::ZERO,
-                    Vector2D::new(offset_x, offset_y),
-                    world,
-                );
+                let delta =
+                    toroidal_delta(Vector2D::ZERO, Vector2D::new(offset_x, offset_y), world);
                 assert!(delta.x.abs() <= world.x * 0.5, "x too far: {delta:?}");
                 assert!(delta.y.abs() <= world.y * 0.5, "y too far: {delta:?}");
             }

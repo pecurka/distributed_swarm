@@ -44,7 +44,7 @@ impl Recorder {
 
     /// Saves a snapshot, if this is a step we are saving.
     pub fn record(&mut self, step_number: u64, agents: &[Agent]) -> Result<()> {
-        if step_number % self.every != 0 {
+        if !step_number.is_multiple_of(self.every) {
             return Ok(());
         }
         for agent in agents {
@@ -107,7 +107,9 @@ mod tests {
         recorder.finish().unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
-        let rows = written.lines().filter(|line| line.starts_with(char::is_numeric));
+        let rows = written
+            .lines()
+            .filter(|line| line.starts_with(char::is_numeric));
         assert_eq!(rows.count(), 10, "two steps of five agents");
         fs::remove_file(&path).ok();
     }

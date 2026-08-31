@@ -19,8 +19,8 @@ pub fn step(agents: &[Agent], params: &Params) -> Vec<Agent> {
             let neighbours = find_neighbours(agent, agents, params);
             let acceleration = steer(&neighbours, agent.velocity, params);
 
-            let velocity = (agent.velocity + acceleration * params.timestep)
-                .clamped_to(params.max_speed);
+            let velocity =
+                (agent.velocity + acceleration * params.timestep).clamped_to(params.max_speed);
             let position = wrap(agent.position + velocity * params.timestep, params.world);
 
             Agent {

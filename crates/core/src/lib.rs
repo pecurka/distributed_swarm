@@ -17,6 +17,7 @@
 //! - [`simulation`] moves the whole swarm forward one step
 //! - [`metrics`]    numbers describing the swarm as a whole
 //! - [`recording`]  saves positions to a file for drawing
+//! - [`report`]     prints a run's settings and progress
 
 pub mod agent;
 pub mod constants;
@@ -25,6 +26,7 @@ pub mod metrics;
 pub mod neighbours;
 pub mod params;
 pub mod recording;
+pub mod report;
 pub mod simulation;
 pub mod steering;
 pub mod swarm_init;
@@ -33,10 +35,11 @@ pub mod vector2d;
 pub use agent::Agent;
 pub use constants::*;
 pub use geometry::{toroidal_delta, wrap};
-pub use params::Params;
-pub use recording::Recorder;
 pub use metrics::{average_neighbour_count, local_alignment, neighbour_counts, polarisation};
 pub use neighbours::{Neighbour, find_neighbours};
+pub use params::Params;
+pub use recording::Recorder;
+pub use report::{configuration_report, progress_heading, progress_line};
 pub use simulation::{run, step};
 pub use steering::{alignment, cohesion, separation, steer};
 pub use swarm_init::{lattice_swarm, scattered_swarm};

@@ -1,0 +1,23 @@
+{
+  // Run Clippy instead of plain `cargo check` when saving. Clippy catches
+  // everything the compiler does, plus a large set of "this works but there is
+  // a clearer way" lints. Without this line you only see compiler errors.
+  "rust-analyzer.check.command": "clippy",
+
+  // Check the whole workspace, not just the crate the open file belongs to, so
+  // a change in swarm-core immediately shows breakage in swarm-seq.
+  "rust-analyzer.check.workspace": true,
+  "rust-analyzer.check.allTargets": true,
+
+  // Format on save with rustfmt, so formatting never drifts.
+  "[rust]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+
+  // The MPI crate needs mpicc on PATH to build. Homebrew puts it in
+  // /opt/homebrew/bin, which GUI apps do not always inherit.
+  "rust-analyzer.cargo.extraEnv": {
+    "PATH": "/opt/homebrew/bin:${env:HOME}/.cargo/bin:${env:PATH}"
+  }
+}

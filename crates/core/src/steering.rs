@@ -87,7 +87,10 @@ pub fn cohesion(neighbours: &[Neighbour]) -> Vector2D {
         combined_size += neighbour.offset.len();
     }
     let neighbour_count = neighbours.len() as f64;
-    direction_of(total * (1.0 / neighbour_count), combined_size / neighbour_count)
+    direction_of(
+        total * (1.0 / neighbour_count),
+        combined_size / neighbour_count,
+    )
 }
 
 /// All three rules blended with the weights from `Params`.
@@ -134,10 +137,17 @@ mod tests {
     fn alignment_points_toward_the_neighbours_direction() {
         // We are going right, the neighbour is going up, so we should be
         // steered upward.
-        let neighbours = vec![neighbour_at(1, Vector2D::new(3.0, 0.0), Vector2D::new(0.0, 2.0))];
+        let neighbours = vec![neighbour_at(
+            1,
+            Vector2D::new(3.0, 0.0),
+            Vector2D::new(0.0, 2.0),
+        )];
         let steer_direction = alignment(&neighbours, Vector2D::new(2.0, 0.0));
         assert!(steer_direction.y > 0.0);
-        assert!(steer_direction.x < 0.0, "should also stop going right so hard");
+        assert!(
+            steer_direction.x < 0.0,
+            "should also stop going right so hard"
+        );
     }
 
     #[test]
@@ -166,7 +176,11 @@ mod tests {
     fn rules_return_directions_of_length_one() {
         // The weights in Params decide how much each rule matters, so the rules
         // themselves must not vary in strength.
-        let neighbours = vec![neighbour_at(1, Vector2D::new(4.0, 3.0), Vector2D::new(0.0, 1.0))];
+        let neighbours = vec![neighbour_at(
+            1,
+            Vector2D::new(4.0, 3.0),
+            Vector2D::new(0.0, 1.0),
+        )];
         for direction in [
             separation(&neighbours, 50.0),
             alignment(&neighbours, Vector2D::new(1.0, 0.0)),

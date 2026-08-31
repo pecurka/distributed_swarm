@@ -7,5 +7,11 @@
 data/*.csv
 data/*.html
 
+# Editor settings that make the project build and lint correctly are committed.
+# Anything else under .vscode is personal.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
 # macOS
 .DS_Store
