@@ -53,33 +53,45 @@ runs.
 
 ## Status
 
-The sequential baseline works. `swarm-dist` splits the world across processes
-and simulates, but does not yet produce correct results — see below.
+The sequential baseline works. `swarm-dist` splits the world across processes,
+swaps border agents between them, and gets a single step exactly right — but
+does not yet hand agents over when they cross a boundary, so it cannot yet be
+trusted over many steps.
 
 - [x] Toolchain verified — processes start, exchange with neighbours, synchronise
 - [x] Core model types — vectors, agents, parameters, toroidal geometry
 - [x] Sequential baseline — steering rules, uniform grid, deterministic setup
 - [x] Visualisation — record a run to CSV, draw it as a page or an SVG
 - [x] Splitting the world — vertical strips, one per process
-- [ ] Border sharing, so agents can see across a strip edge
+- [x] Border sharing — copies of edge agents swapped between neighbours
 - [ ] Handing agents over when they cross a boundary
 - [ ] Fidelity comparison against the baseline
 - [ ] Benchmark harness
 - [ ] Scaling measurements
 
-### What the distributed runner does not do yet
+### One step is already provably correct
 
-Two pieces are missing, and both make its results wrong rather than merely slow:
+Before each step, every process sends its two neighbours a copy of the agents
+standing in a band along its edges, as wide as an agent can see. Those copies
+are read-only: a process uses them to work out how its own agents should steer,
+and never moves them.
 
-- **Agents near a strip edge cannot see across it.** Their neighbours belong to
-  the process next door, so they steer on incomplete information and the flock
-  shows seams at the boundaries.
-- **Nobody hands agents over.** Ownership is decided once at the start and never
-  revisited, so an agent that walks into the next strip keeps being simulated by
-  the process it started in.
+That makes a single step exactly right. A test splits a 1000-agent swarm across
+1, 2, 3, 4, 8 and 20 processes, runs one step of the whole scheme, puts the
+results back together, and checks them against the sequential run — they must
+match bit for bit, not merely closely. A second test runs the same thing with no
+border copies and checks the answer *differs*, so the first test cannot pass by
+the copies doing nothing.
 
-The runner reports the second one directly, as a count of agents standing
-outside the strip that still owns them:
+Both run under plain `cargo test`. The border logic lives in `swarm-core` with
+no MPI in it precisely so the whole scheme can be checked inside one process.
+
+### What the distributed runner still does not do
+
+**Nobody hands agents over.** Ownership is decided once at the start and never
+revisited, so an agent that walks into the next strip keeps being simulated by
+the process it started in. The runner reports this directly, as a count of
+agents standing outside the strip that still owns them:
 
 ```
   step   agents per process (min / average / max)   strayed
@@ -90,6 +102,9 @@ outside the strip that still owns them:
 Over half the swarm, by step 600. That column is there on purpose: without it
 the steady 1.06x imbalance reads like healthy load balance, when in fact the
 counts describe where agents *started*, not where they are.
+
+Until that is fixed, only a single step can be checked against the sequential
+run. Many steps in a row need agents to be handed over as they cross.
 
 The uniform grid is checked against the every-agent-against-every-agent search:
 both must produce bit-identical results, step after step. The slow version stays
@@ -112,7 +127,8 @@ crates/core/     the model — one file per idea:
                    neighbours                           the slow, obvious search
                    grid                                 the fast search
                    steering, simulation                 the three rules, one step
-                   partition                            who owns which strip
+                   partition, borders                   who owns which strip,
+                                                        and what crosses between
                    metrics, report, recording           measuring and reporting
 crates/seq/      sequential baseline
 crates/dist/     distributed runner (MPI, via rsmpi)
