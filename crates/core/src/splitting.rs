@@ -7,6 +7,8 @@
 //!
 //! - [`partition`] which strip of the world belongs to which process
 //! - [`borders`]   sharing copies of agents across strip boundaries
+//! - [`migration`] handing agents over when they cross into another strip
 
 pub mod borders;
+pub mod migration;
 pub mod partition;

@@ -53,10 +53,9 @@ runs.
 
 ## Status
 
-The sequential baseline works. `swarm-dist` splits the world across processes,
-swaps border agents between them, and gets a single step exactly right — but
-does not yet hand agents over when they cross a boundary, so it cannot yet be
-trusted over many steps.
+The simulation is finished and correct. Splitting it across processes produces
+bit-identical results to running it on one — verified at 1, 2, 3, 4, 8, 10 and
+20 processes. What remains is measuring it.
 
 - [x] Toolchain verified — processes start, exchange with neighbours, synchronise
 - [x] Core model types — vectors, agents, parameters, toroidal geometry
@@ -64,47 +63,61 @@ trusted over many steps.
 - [x] Visualisation — record a run to CSV, draw it as a page or an SVG
 - [x] Splitting the world — vertical strips, one per process
 - [x] Border sharing — copies of edge agents swapped between neighbours
-- [ ] Handing agents over when they cross a boundary
-- [ ] Fidelity comparison against the baseline
+- [x] Handing agents over when they cross a boundary
+- [x] Fidelity comparison against the baseline
 - [ ] Benchmark harness
 - [ ] Scaling measurements
 
-### One step is already provably correct
+### The distributed run is identical to the sequential one
 
-Before each step, every process sends its two neighbours a copy of the agents
-standing in a band along its edges, as wide as an agent can see. Those copies
-are read-only: a process uses them to work out how its own agents should steer,
-and never moves them.
-
-That makes a single step exactly right. A test splits a 1000-agent swarm across
-1, 2, 3, 4, 8 and 20 processes, runs one step of the whole scheme, puts the
-results back together, and checks them against the sequential run — they must
-match bit for bit, not merely closely. A second test runs the same thing with no
-border copies and checks the answer *differs*, so the first test cannot pass by
-the copies doing nothing.
-
-Both run under plain `cargo test`. The border logic lives in `swarm-core` with
-no MPI in it precisely so the whole scheme can be checked inside one process.
-
-### What the distributed runner still does not do
-
-**Nobody hands agents over.** Ownership is decided once at the start and never
-revisited, so an agent that walks into the next strip keeps being simulated by
-the process it started in. The runner reports this directly, as a count of
-agents standing outside the strip that still owns them:
+Both runners end by printing one number summarising the exact final state of
+every agent — position and velocity, bit for bit. They match:
 
 ```
-  step   agents per process (min / average / max)   strayed
-     0     239 /   250.0 /   264       0
-   600     239 /   250.0 /   264     561
+sequential:    475a1e244ee75967
+ 1 process:    475a1e244ee75967
+ 2 processes:  475a1e244ee75967
+ 4 processes:  475a1e244ee75967
+ 8 processes:  475a1e244ee75967
 ```
 
-Over half the swarm, by step 600. That column is there on purpose: without it
-the steady 1.06x imbalance reads like healthy load balance, when in fact the
-counts describe where agents *started*, not where they are.
+Not "close" and not "statistically similar" — the same simulation, however many
+processes run it.
 
-Until that is fixed, only a single step can be checked against the sequential
-run. Many steps in a row need agents to be handed over as they cross.
+This is checked in two separate ways, because they catch different mistakes. A
+test runs the whole scheme — split, swap borders, step, hand over, repeat — for
+200 steps inside a single process and compares against the sequential result, so
+algorithm errors show up under plain `cargo test`. The fingerprint then catches
+errors in the message passing itself, which that test cannot see.
+
+Three pieces make it work:
+
+- **Strips.** The world is cut into vertical slices, one per process. Nobody is
+  in charge: each process works out its own slice from its number, and they
+  agree because they all do the same sum.
+- **Border copies.** Before each step, every process sends its neighbours a copy
+  of the agents along its edges, as wide as an agent can see. Those copies are
+  read-only and thrown away after the step.
+- **Hand-overs.** After each step, an agent that has walked into a neighbour's
+  strip becomes theirs.
+
+The order matters: copies are made before the step, hand-overs happen after. An
+agent is therefore never both copied and handed over in the same step, which
+would leave two processes each believing they owned it.
+
+### Load imbalance is already visible
+
+Flocks bunch up, and a fixed grid of strips cannot follow them. At 8 processes
+with 2000 agents:
+
+```
+  step   agents per process (min / average / max)
+   200     129 /   250.0 /   400   busiest 1.60x average
+   600     132 /   250.0 /   587   busiest 2.35x average
+```
+
+One process ends up with four times another's work, and every step the rest wait
+at the barrier for it. Measuring that cost is what comes next.
 
 The uniform grid is checked against the every-agent-against-every-agent search:
 both must produce bit-identical results, step after step. The slow version stays
@@ -127,8 +140,9 @@ crates/core/     the model — one file per idea:
                    neighbours                           the slow, obvious search
                    grid                                 the fast search
                    steering, simulation                 the three rules, one step
-                   partition, borders                   who owns which strip,
-                                                        and what crosses between
+                   partition, borders, migration        who owns which strip,
+                                                        what is copied across it,
+                                                        and what moves between
                    metrics, report, recording           measuring and reporting
 crates/seq/      sequential baseline
 crates/dist/     distributed runner (MPI, via rsmpi)

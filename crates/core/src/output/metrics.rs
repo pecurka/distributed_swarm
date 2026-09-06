@@ -78,10 +78,51 @@ pub fn average_neighbour_count(agents: &[Agent], params: &Params) -> f64 {
     counts.iter().sum::<usize>() as f64 / counts.len() as f64
 }
 
+/// A single number summarising the exact state of a whole swarm.
+///
+/// Sorts by id, then mixes every position and velocity, bit for bit, into one
+/// number. Two swarms give the same fingerprint only if they are identical down
+/// to the last decimal place.
+///
+/// This is how the sequential and distributed runs are compared. Each process
+/// holds a different part of the swarm in a different order, so the agents are
+/// sorted first — otherwise the same swarm would fingerprint differently just
+/// because it was gathered in a different order.
+pub fn state_fingerprint(agents: &[Agent]) -> u64 {
+    let mut sorted: Vec<&Agent> = agents.iter().collect();
+    sorted.sort_by_key(|agent| agent.id);
+
+    // FNV-1a, a small well-known hash. Chosen because it is a handful of lines
+    // and gives the same answer everywhere, which a faster hash would not.
+    const START: u64 = 0xcbf2_9ce4_8422_2325;
+    const MIX: u64 = 0x0000_0100_0000_01b3;
+
+    let mut hash = START;
+    let fold = |bytes: [u8; 8], hash: &mut u64| {
+        for byte in bytes {
+            *hash ^= byte as u64;
+            *hash = hash.wrapping_mul(MIX);
+        }
+    };
+    for agent in sorted {
+        fold(agent.id.to_be_bytes(), &mut hash);
+        for value in [
+            agent.position.x,
+            agent.position.y,
+            agent.velocity.x,
+            agent.velocity.y,
+        ] {
+            // `to_bits` compares the exact stored number, not a rounded version.
+            fold(value.to_bits().to_be_bytes(), &mut hash);
+        }
+    }
+    hash
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Params;
+    use crate::{Params, scattered_swarm};
 
     fn agent_going(id: u64, velocity: Vector2D) -> Agent {
         Agent {
@@ -203,6 +244,34 @@ mod tests {
         ];
         assert_eq!(neighbour_counts(&agents, &params), vec![1, 1, 0]);
         assert!((average_neighbour_count(&agents, &params) - 2.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_same_swarm_always_fingerprints_the_same() {
+        let params = Params::default();
+        let agents = scattered_swarm(100, &params);
+        assert_eq!(state_fingerprint(&agents), state_fingerprint(&agents));
+    }
+
+    #[test]
+    fn the_order_agents_are_gathered_in_does_not_matter() {
+        // Each process holds a different part of the swarm, so they arrive in
+        // whatever order they were collected. That must not change the answer.
+        let params = Params::default();
+        let agents = scattered_swarm(100, &params);
+        let mut shuffled = agents.clone();
+        shuffled.reverse();
+        assert_eq!(state_fingerprint(&agents), state_fingerprint(&shuffled));
+    }
+
+    #[test]
+    fn the_smallest_possible_difference_changes_the_fingerprint() {
+        let params = Params::default();
+        let agents = scattered_swarm(100, &params);
+        let mut nudged = agents.clone();
+        // One agent moved by the smallest amount an f64 can express.
+        nudged[7].position.x = f64::from_bits(nudged[7].position.x.to_bits() + 1);
+        assert_ne!(state_fingerprint(&agents), state_fingerprint(&nudged));
     }
 
     #[test]

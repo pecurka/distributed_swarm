@@ -18,7 +18,7 @@ use mpi::traits::*;
 use swarm_core::{
     Agent, DEFAULT_SWARM_SIZE, Params, Partition, agents_to_send_left, agents_to_send_right,
     configuration_report, decode_from_numbers, encode_to_numbers, scattered_swarm,
-    step_with_ghosts,
+    sort_agents_by_destination, state_fingerprint, step_with_ghosts,
 };
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
@@ -85,6 +85,9 @@ fn main() {
 
         mine = step_with_ghosts(&mine, &ghosts, &params);
 
+        // Anyone who walked into a neighbour's strip now becomes theirs.
+        mine = hand_over_agents(&world, &partition, mine, &params);
+
         // Everyone waits for the slowest before starting the next step. Time
         // spent here is time lost to uneven load.
         world.barrier();
@@ -101,6 +104,8 @@ fn main() {
             );
         }
     }
+
+    report_fingerprint(&world, rank, &mine);
 }
 
 /// Collects how many agents each process is holding and prints one line.
@@ -153,6 +158,70 @@ fn report_spread(
         "  {step_number:>4}   {smallest:>5} / {average:>7.1} / {largest:>5}   \
          {strayed_total:>5}   (busiest {imbalance:.2}x average)"
     );
+}
+
+/// Collects every process's agents onto the root process and prints one number
+/// summarising the exact final state.
+///
+/// The sequential runner prints the same number. If they match, splitting the
+/// work across processes changed nothing at all — which is the first thing this
+/// project set out to show.
+fn report_fingerprint(world: &mpi::topology::SimpleCommunicator, rank: i32, mine: &[Agent]) {
+    let mut everyone: Vec<Agent> = Vec::new();
+    if rank == ROOT_RANK {
+        everyone.extend_from_slice(mine);
+        for other in 0..world.size() {
+            if other == ROOT_RANK {
+                continue;
+            }
+            let (numbers, _status) = world.process_at_rank(other).receive_vec::<f64>();
+            everyone.extend(decode_from_numbers(&numbers));
+        }
+        println!();
+        println!("  fingerprint       {:016x}", state_fingerprint(&everyone));
+    } else {
+        let numbers = encode_to_numbers(mine);
+        world.process_at_rank(ROOT_RANK).send(&numbers[..]);
+    }
+}
+
+/// Passes agents that walked out of our strip to whoever owns where they now
+/// stand, and takes in the ones that walked into ours.
+///
+/// Happens after the step, once positions are settled — and well apart from the
+/// border copies, which are made before the step and thrown away after it. An
+/// agent is therefore never both copied and handed over in the same step, which
+/// would leave two processes each believing they owned it.
+fn hand_over_agents(
+    world: &mpi::topology::SimpleCommunicator,
+    partition: &Partition,
+    mine: Vec<Agent>,
+    params: &Params,
+) -> Vec<Agent> {
+    let sorted = sort_agents_by_destination(&mine, partition, params);
+    if partition.process_count() == 1 {
+        return sorted.staying;
+    }
+
+    let left = partition.left_neighbour() as i32;
+    let right = partition.right_neighbour() as i32;
+    let going_left = encode_to_numbers(&sorted.going_left);
+    let going_right = encode_to_numbers(&sorted.going_right);
+
+    let mut kept = sorted.staying;
+    for (destination, source, outgoing) in [(left, right, &going_left), (right, left, &going_right)]
+    {
+        let arrived: Vec<f64> = mpi::request::scope(|scope| {
+            let sent = world
+                .process_at_rank(destination)
+                .immediate_send(scope, &outgoing[..]);
+            let (numbers, _status) = world.process_at_rank(source).receive_vec::<f64>();
+            sent.wait();
+            numbers
+        });
+        kept.extend(decode_from_numbers(&arrived));
+    }
+    kept
 }
 
 /// Sends our edge agents to the two processes next door and collects theirs.

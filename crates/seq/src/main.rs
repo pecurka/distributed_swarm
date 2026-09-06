@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use swarm_core::{
     DEFAULT_SWARM_SIZE, Params, Recorder, configuration_report, local_alignment, polarisation,
-    progress_heading, progress_line, scattered_swarm, step,
+    progress_heading, progress_line, scattered_swarm, state_fingerprint, step,
 };
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
@@ -88,6 +88,11 @@ fn main() {
     if let Some(recorder) = recorder {
         recorder.finish().expect("could not finish the recording");
     }
+
+    // One number summarising the exact final state. The distributed runner
+    // prints the same thing, so the two can be compared directly.
+    println!();
+    println!("  fingerprint       {:016x}", state_fingerprint(&agents));
 }
 
 /// Reads one number from a fixed position on the command line.

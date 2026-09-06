@@ -26,13 +26,14 @@ pub use behaviour::steering::{alignment, cohesion, separation, steer};
 pub use neighbours::brute_force::{Neighbour, find_neighbours};
 pub use neighbours::grid::Grid;
 pub use output::metrics::{
-    average_neighbour_count, local_alignment, neighbour_counts, polarisation,
+    average_neighbour_count, local_alignment, neighbour_counts, polarisation, state_fingerprint,
 };
 pub use output::recording::Recorder;
 pub use output::report::{configuration_report, progress_heading, progress_line};
 pub use splitting::borders::{
     agents_to_send_left, agents_to_send_right, decode_from_numbers, encode_to_numbers,
 };
+pub use splitting::migration::{Destinations, sort_agents_by_destination};
 pub use splitting::partition::Partition;
 pub use world::agent::Agent;
 pub use world::constants::*;
