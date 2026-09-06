@@ -1,6 +1,6 @@
 //! Numbers that describe the state of the whole swarm.
 
-use crate::{Agent, Params, Vector2D, find_neighbours};
+use crate::{Agent, Grid, Params, Vector2D};
 
 /// How flocked the swarm is, from 0 to 1.
 ///
@@ -35,10 +35,16 @@ pub fn polarisation(agents: &[Agent]) -> f64 {
 /// High here with low overall means several flocks. Low on both means something
 /// is wrong.
 pub fn local_alignment(agents: &[Agent], params: &Params) -> f64 {
+    // Uses the grid, not the every-agent-against-every-agent search. This is a
+    // diagnostic printed during a run, so it must not cost more than the step
+    // it is describing — with the slow search it cost around a hundred times
+    // more, which quietly inflated the sequential baseline every speedup number
+    // is divided by.
+    let grid = Grid::build(agents, params);
     let mut total = 0.0;
     let mut counted = 0;
     for agent in agents {
-        let neighbours = find_neighbours(agent, agents, params);
+        let neighbours = grid.neighbours_of(agent, agents, params);
         if neighbours.is_empty() {
             continue;
         }
@@ -63,9 +69,10 @@ pub fn local_alignment(agents: &[Agent], params: &Params) -> f64 {
 /// evenly across the world can be perfectly aligned and still not be a flock.
 /// Both numbers are needed to say the simulation is behaving.
 pub fn neighbour_counts(agents: &[Agent], params: &Params) -> Vec<usize> {
+    let grid = Grid::build(agents, params);
     agents
         .iter()
-        .map(|agent| find_neighbours(agent, agents, params).len())
+        .map(|agent| grid.neighbours_of(agent, agents, params).len())
         .collect()
 }
 

@@ -158,9 +158,24 @@ fn main() {
 
     let wall_clock = started_run.elapsed();
     let slowest = slowest_across_processes(&world, &timings);
+
+    // The slowest process's own total. This is the number to compare against
+    // the sequential runner's "simulating": both cover the simulation and
+    // nothing else, so progress lines and recording cannot flatter either side.
+    let my_total = timings.total().as_secs_f64();
+    let mut simulating = 0.0;
+    world.all_reduce_into(&my_total, &mut simulating, SystemOperation::max());
     if rank == ROOT_RANK {
         println!();
-        println!("  wall clock        {:.3}s", wall_clock.as_secs_f64());
+        println!(
+            "  simulating        {:.3}s   ({:.3}ms per step)",
+            simulating,
+            1000.0 * simulating / steps.max(1) as f64
+        );
+        println!(
+            "  wall clock        {:.3}s   (including progress lines and recording)",
+            wall_clock.as_secs_f64()
+        );
         if !measure_phases {
             println!("  (pass --measure-phases to see where the time went)");
         }

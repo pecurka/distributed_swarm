@@ -248,6 +248,16 @@ leave it out and runs measuring the breakdown put it in.
 Each part is the slowest process's figure, so they add to more than the wall
 clock: different processes are slowest at different parts.
 
+Both runners report two numbers. **`simulating`** covers the simulation and
+nothing else — progress lines and recording sit outside it — and it is the one
+to compare between them. **`wall clock`** covers everything the program did.
+Speedup is one runner's `simulating` divided by the other's, so that a
+diagnostic can never flatter either side.
+
+Timing on a laptop varies by around 3% between runs of the same configuration,
+so a single run is not a measurement. Every configuration needs several runs and
+a median.
+
 ## Reproducing the measurements
 
 <!-- TODO: exact commands, hardware/cluster description, and how to regenerate

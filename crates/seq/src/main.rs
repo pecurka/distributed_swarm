@@ -63,10 +63,16 @@ fn main() {
             .expect("could not record step 0");
     }
 
+    // Only the simulation is timed. The progress lines and any recording sit
+    // outside it: this number is the baseline every distributed speedup is
+    // divided by, so anything that is not the simulation must stay out of it.
+    let mut simulating = std::time::Duration::ZERO;
     let started_run = Instant::now();
 
     for current_step in 1..=steps {
+        let started_step = Instant::now();
         agents = step(&agents, &params);
+        simulating += started_step.elapsed();
 
         if let Some(recorder) = recorder.as_mut() {
             recorder
@@ -100,9 +106,13 @@ fn main() {
     // like.
     println!();
     println!(
-        "  wall clock        {:.3}s   ({:.3}ms per step)",
-        wall_clock.as_secs_f64(),
-        1000.0 * wall_clock.as_secs_f64() / steps.max(1) as f64
+        "  simulating        {:.3}s   ({:.3}ms per step)",
+        simulating.as_secs_f64(),
+        1000.0 * simulating.as_secs_f64() / steps.max(1) as f64
+    );
+    println!(
+        "  wall clock        {:.3}s   (including progress lines and recording)",
+        wall_clock.as_secs_f64()
     );
 
     // One number summarising the exact final state. The distributed runner
