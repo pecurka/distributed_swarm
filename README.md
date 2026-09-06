@@ -260,10 +260,49 @@ a median.
 
 ## Reproducing the measurements
 
-<!-- TODO: exact commands, hardware/cluster description, and how to regenerate
-     every figure  -->
+```bash
+bench/sweep.sh                              # the full sweep
+REPEATS=3 STEPS=200 bench/sweep.sh          # a quicker version
+```
 
-Raw measurement output is committed rather than summarized, so every number and
+Every run appends one row to `data/results.csv`. Rows accumulate and are never
+overwritten, so an interrupted sweep loses nothing.
+
+The sweep does four things:
+
+1. **The sequential baseline**, repeated. Everything else is measured against it.
+2. **Strong scaling** — the same swarm split more and more ways.
+3. **The same again with `--measure-phases`**, which makes the compute / wait /
+   communicate breakdown meaningful. That extra barrier costs a little speed, so
+   these rows are used for the breakdown and never for speedup.
+4. **Weak scaling** — each process always holds the same number of agents, so if
+   splitting the work were free the time would not change at all.
+
+Either runner can also be pointed at a results file directly:
+
+```bash
+cargo run --release -p swarm-seq -- 4000 400 --results data/results.csv
+mpirun -n 4 ./target/release/swarm-dist 4000 400 --results data/results.csv
+```
+
+### Where the measurements run, and what that costs
+
+All of it runs on one machine with 10 cores, and the process count never goes
+above 10. Past that, processes share cores and the timings measure the operating
+system moving processes around rather than the simulation. The sweep refuses to
+run oversubscribed rather than quietly producing numbers that mean nothing.
+
+This is a limitation worth stating plainly: these are processes on one machine,
+sharing a memory bus, not separate machines with a network between them.
+Communication is therefore cheaper here than it would be on a cluster, so the
+point at which communication starts to dominate arrives later in these
+measurements than it would on real distributed hardware.
+
+Every row carries the fingerprint of the swarm the run ended with. A fast result
+and a slow one can only be compared if they computed the same thing, and the
+fingerprint is the evidence that they did.
+
+Raw measurement output is committed rather than summarised, so every number and
 figure in the thesis can be traced back to the run that produced it.
 
 ## Thesis

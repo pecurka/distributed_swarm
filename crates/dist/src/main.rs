@@ -19,10 +19,10 @@ use constants::ROOT_RANK;
 use mpi::collective::SystemOperation;
 use mpi::traits::*;
 use swarm_core::{
-    Agent, DEFAULT_SWARM_SIZE, Params, Partition, Recorder, Timings, agents_to_send_left,
-    agents_to_send_right, configuration_report, decode_from_numbers, encode_to_numbers,
-    scattered_swarm, sort_agents_by_destination, state_fingerprint, step_with_ghosts,
-    timing_report,
+    Agent, DEFAULT_SWARM_SIZE, Params, Partition, Recorder, RunResult, Timings,
+    agents_to_send_left, agents_to_send_right, append_result, configuration_report,
+    decode_from_numbers, encode_to_numbers, scattered_swarm, sort_agents_by_destination,
+    state_fingerprint, step_with_ghosts, timing_report,
 };
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
@@ -190,7 +190,30 @@ fn main() {
         }
     }
 
-    report_fingerprint(&world, rank, &mine);
+    let (smallest, largest) = load_spread(&world, mine.len());
+    let fingerprint = report_fingerprint(&world, rank, &mine);
+
+    if rank == ROOT_RANK
+        && let Some(path) = flag_value("--results")
+    {
+        append_result(
+            std::path::Path::new(&path),
+            &RunResult {
+                runner: "distributed",
+                processes: process_count as usize,
+                agents: swarm_size,
+                steps,
+                simulating: std::time::Duration::from_secs_f64(simulating),
+                wall_clock,
+                timings: slowest,
+                measured_phases: measure_phases,
+                smallest_process_load: smallest,
+                largest_process_load: largest,
+                fingerprint,
+            },
+        )
+        .unwrap_or_else(|error| panic!("could not write results to {path}: {error}"));
+    }
 }
 
 /// Collects how many agents each process is holding and prints one line.
@@ -317,7 +340,7 @@ fn slowest_across_processes(
 /// The sequential runner prints the same number. If they match, splitting the
 /// work across processes changed nothing at all — which is the first thing this
 /// project set out to show.
-fn report_fingerprint(world: &mpi::topology::SimpleCommunicator, rank: i32, mine: &[Agent]) {
+fn report_fingerprint(world: &mpi::topology::SimpleCommunicator, rank: i32, mine: &[Agent]) -> u64 {
     let mut everyone: Vec<Agent> = Vec::new();
     if rank == ROOT_RANK {
         everyone.extend_from_slice(mine);
@@ -328,12 +351,25 @@ fn report_fingerprint(world: &mpi::topology::SimpleCommunicator, rank: i32, mine
             let (numbers, _status) = world.process_at_rank(other).receive_vec::<f64>();
             everyone.extend(decode_from_numbers(&numbers));
         }
+        let fingerprint = state_fingerprint(&everyone);
         println!();
-        println!("  fingerprint       {:016x}", state_fingerprint(&everyone));
+        println!("  fingerprint       {fingerprint:016x}");
+        fingerprint
     } else {
         let numbers = encode_to_numbers(mine);
         world.process_at_rank(ROOT_RANK).send(&numbers[..]);
+        0
     }
+}
+
+/// How many agents the emptiest and busiest processes are holding.
+fn load_spread(world: &mpi::topology::SimpleCommunicator, mine: usize) -> (usize, usize) {
+    let mine = mine as i32;
+    let mut smallest = 0;
+    let mut largest = 0;
+    world.all_reduce_into(&mine, &mut smallest, SystemOperation::min());
+    world.all_reduce_into(&mine, &mut largest, SystemOperation::max());
+    (smallest as usize, largest as usize)
 }
 
 /// Passes agents that walked out of our strip to whoever owns where they now

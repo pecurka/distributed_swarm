@@ -9,8 +9,9 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use swarm_core::{
-    DEFAULT_SWARM_SIZE, Params, Recorder, configuration_report, local_alignment, polarisation,
-    progress_heading, progress_line, scattered_swarm, state_fingerprint, step,
+    DEFAULT_SWARM_SIZE, Params, Recorder, RunResult, Timings, append_result, configuration_report,
+    local_alignment, polarisation, progress_heading, progress_line, scattered_swarm,
+    state_fingerprint, step,
 };
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
@@ -117,8 +118,33 @@ fn main() {
 
     // One number summarising the exact final state. The distributed runner
     // prints the same thing, so the two can be compared directly.
+    let fingerprint = state_fingerprint(&agents);
     println!();
-    println!("  fingerprint       {:016x}", state_fingerprint(&agents));
+    println!("  fingerprint       {fingerprint:016x}");
+
+    if let Some(path) = flag_value("--results") {
+        append_result(
+            std::path::Path::new(&path),
+            &RunResult {
+                runner: "sequential",
+                processes: 1,
+                agents: agents.len() as u64,
+                steps,
+                simulating,
+                wall_clock,
+                // A single process has nobody to wait for or talk to.
+                timings: Timings {
+                    computing: simulating,
+                    ..Timings::default()
+                },
+                measured_phases: false,
+                smallest_process_load: agents.len(),
+                largest_process_load: agents.len(),
+                fingerprint,
+            },
+        )
+        .unwrap_or_else(|error| panic!("could not write results to {path}: {error}"));
+    }
 }
 
 /// Reads one number from a fixed position on the command line.

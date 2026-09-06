@@ -30,6 +30,7 @@ pub use output::metrics::{
 };
 pub use output::recording::Recorder;
 pub use output::report::{configuration_report, progress_heading, progress_line};
+pub use output::results::{RunResult, append_result};
 pub use output::timing::{Timings, timing_report};
 pub use splitting::borders::{
     agents_to_send_left, agents_to_send_right, decode_from_numbers, encode_to_numbers,
