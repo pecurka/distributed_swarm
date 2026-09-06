@@ -21,7 +21,7 @@ pub mod output;
 pub mod splitting;
 pub mod world;
 
-pub use behaviour::simulation::{run, step, step_slowly};
+pub use behaviour::simulation::{run, step, step_slowly, step_with_ghosts};
 pub use behaviour::steering::{alignment, cohesion, separation, steer};
 pub use neighbours::brute_force::{Neighbour, find_neighbours};
 pub use neighbours::grid::Grid;
@@ -30,6 +30,9 @@ pub use output::metrics::{
 };
 pub use output::recording::Recorder;
 pub use output::report::{configuration_report, progress_heading, progress_line};
+pub use splitting::borders::{
+    agents_to_send_left, agents_to_send_right, decode_from_numbers, encode_to_numbers,
+};
 pub use splitting::partition::Partition;
 pub use world::agent::Agent;
 pub use world::constants::*;

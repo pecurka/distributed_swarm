@@ -34,6 +34,42 @@ pub fn step(agents: &[Agent], params: &Params) -> Vec<Agent> {
         .collect()
 }
 
+/// One step for a process that owns only part of the world.
+///
+/// `mine` are the agents this process owns and will move. `ghosts` are
+/// read-only copies of agents belonging to the processes next door, close
+/// enough to the boundary that this process's agents can see them.
+///
+/// Only `mine` comes back. Ghosts are never moved — the process that owns them
+/// is moving them, and if both did, they would disagree.
+///
+/// With no ghosts and every agent owned, this is exactly [`step`].
+pub fn step_with_ghosts(mine: &[Agent], ghosts: &[Agent], params: &Params) -> Vec<Agent> {
+    // The grid has to cover the ghosts too, or the agents they were sent for
+    // would not find them.
+    let mut everyone_visible = Vec::with_capacity(mine.len() + ghosts.len());
+    everyone_visible.extend_from_slice(mine);
+    everyone_visible.extend_from_slice(ghosts);
+    let grid = Grid::build(&everyone_visible, params);
+
+    mine.iter()
+        .map(|agent| {
+            let neighbours = grid.neighbours_of(agent, &everyone_visible, params);
+            let acceleration = steer(&neighbours, agent.velocity, params);
+
+            let velocity =
+                (agent.velocity + acceleration * params.timestep).clamped_to(params.max_speed);
+            let position = wrap(agent.position + velocity * params.timestep, params.world);
+
+            Agent {
+                id: agent.id,
+                position,
+                velocity,
+            }
+        })
+        .collect()
+}
+
 /// The same step, done the slow and obvious way.
 ///
 /// Compares every agent against every other one instead of using the grid.

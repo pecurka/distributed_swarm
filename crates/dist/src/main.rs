@@ -16,7 +16,9 @@ use constants::ROOT_RANK;
 use mpi::collective::SystemOperation;
 use mpi::traits::*;
 use swarm_core::{
-    DEFAULT_SWARM_SIZE, Params, Partition, configuration_report, scattered_swarm, step,
+    Agent, DEFAULT_SWARM_SIZE, Params, Partition, agents_to_send_left, agents_to_send_right,
+    configuration_report, decode_from_numbers, encode_to_numbers, scattered_swarm,
+    step_with_ghosts,
 };
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
@@ -77,11 +79,17 @@ fn main() {
     report_spread(&world, rank, 0, &mine, &partition, &params, swarm_size);
 
     for current_step in 1..=steps {
-        // The same step function the sequential runner uses. It is simply
-        // given fewer agents.
-        mine = step(&mine, &params);
+        // Swap copies of the agents along our edges with the two processes next
+        // door, so our edge agents can see across the boundary.
+        let ghosts = swap_border_agents(&world, &partition, &mine, &params);
 
-        if current_step % REPORT_EVERY == 0 || current_step == steps {
+        mine = step_with_ghosts(&mine, &ghosts, &params);
+
+        // Everyone waits for the slowest before starting the next step. Time
+        // spent here is time lost to uneven load.
+        world.barrier();
+
+        if current_step.is_multiple_of(REPORT_EVERY) || current_step == steps {
             report_spread(
                 &world,
                 rank,
@@ -145,6 +153,48 @@ fn report_spread(
         "  {step_number:>4}   {smallest:>5} / {average:>7.1} / {largest:>5}   \
          {strayed_total:>5}   (busiest {imbalance:.2}x average)"
     );
+}
+
+/// Sends our edge agents to the two processes next door and collects theirs.
+///
+/// Two rounds. First everyone sends leftwards and receives from the right, then
+/// everyone sends rightwards and receives from the left. Doing it in rounds is
+/// what keeps two processes from both waiting on each other.
+///
+/// The sends are non-blocking: a plain send would sit waiting for the other
+/// side to be ready to receive, and if every process did that at the same
+/// moment nothing would ever move.
+fn swap_border_agents(
+    world: &mpi::topology::SimpleCommunicator,
+    partition: &Partition,
+    mine: &[Agent],
+    params: &Params,
+) -> Vec<Agent> {
+    // On its own, a process is its own neighbour and already sees everything.
+    if partition.process_count() == 1 {
+        return Vec::new();
+    }
+
+    let left = partition.left_neighbour() as i32;
+    let right = partition.right_neighbour() as i32;
+
+    let going_left = encode_to_numbers(&agents_to_send_left(mine, partition, params));
+    let going_right = encode_to_numbers(&agents_to_send_right(mine, partition, params));
+
+    let mut ghosts = Vec::new();
+    for (destination, source, outgoing) in [(left, right, &going_left), (right, left, &going_right)]
+    {
+        let arrived: Vec<f64> = mpi::request::scope(|scope| {
+            let sent = world
+                .process_at_rank(destination)
+                .immediate_send(scope, &outgoing[..]);
+            let (numbers, _status) = world.process_at_rank(source).receive_vec::<f64>();
+            sent.wait();
+            numbers
+        });
+        ghosts.extend(decode_from_numbers(&arrived));
+    }
+    ghosts
 }
 
 /// Reads one number from a fixed position on the command line.

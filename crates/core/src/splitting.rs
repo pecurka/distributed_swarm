@@ -6,5 +6,7 @@
 //! process, against the sequential result.
 //!
 //! - [`partition`] which strip of the world belongs to which process
+//! - [`borders`]   sharing copies of agents across strip boundaries
 
+pub mod borders;
 pub mod partition;
