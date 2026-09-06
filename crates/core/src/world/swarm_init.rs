@@ -4,7 +4,7 @@
 //! measures the starting conditions instead of the distribution. So nothing
 //! here is random.
 
-use crate::constants::INITIAL_VELOCITY;
+use crate::world::constants::INITIAL_VELOCITY;
 use crate::{Agent, Params, Vector2D};
 
 /// Places agents on an evenly spaced grid, all moving the same way.

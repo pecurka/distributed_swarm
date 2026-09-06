@@ -1,7 +1,7 @@
 //! Settings for a single run.
 
 use crate::Vector2D;
-use crate::constants::{
+use crate::world::constants::{
     DEFAULT_MAX_SPEED, DEFAULT_PERCEPTION_RADIUS, DEFAULT_SEPARATION_RADIUS, DEFAULT_TIMESTEP,
     DEFAULT_WEIGHT_ALIGNMENT, DEFAULT_WEIGHT_COHESION, DEFAULT_WEIGHT_SEPARATION, DEFAULT_WORLD,
 };

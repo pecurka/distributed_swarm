@@ -1,52 +1,39 @@
 //! The boids model, shared by the sequential and distributed runners.
 //!
-//! Nothing here knows about MPI or about how the work gets split up. That's the
-//! point: both runners use this same code, so any difference in their results
-//! comes from the distribution and nothing else.
+//! Nothing here knows about MPI. That's the point: both runners use this same
+//! code, so any difference in their results comes from the distribution and
+//! nothing else.
 //!
-//! This file just lists the modules:
+//! The modules are grouped by what they are for:
 //!
-//! - [`vector2d`]   the 2D vector type
-//! - [`agent`]      a single boid
-//! - [`params`]     settings for a run
-//! - [`constants`]  default values for those settings
-//! - [`geometry`]   distance maths for the wrap-around world
-//! - [`swarm_init`] builds the starting swarm
-//! - [`neighbours`] finds the agents near an agent, the slow obvious way
-//! - [`grid`]       finds them quickly, by splitting the world into squares
-//! - [`partition`]  cuts the world into strips, one per process
-//! - [`steering`]   the three rules that make a flock
-//! - [`simulation`] moves the whole swarm forward one step
-//! - [`metrics`]    numbers describing the swarm as a whole
-//! - [`recording`]  saves positions to a file for drawing
-//! - [`report`]     prints a run's settings and progress
+//! - [`world`]      the space and what is in it
+//! - [`neighbours`] who is near whom
+//! - [`behaviour`]  the three rules, and one step of the simulation
+//! - [`splitting`]  dividing the world between processes
+//! - [`output`]     measuring and showing
+//!
+//! Everything is re-exported below, so callers can say `swarm_core::Agent`
+//! without needing to know which folder it lives in.
 
-pub mod agent;
-pub mod constants;
-pub mod geometry;
-pub mod grid;
-pub mod metrics;
+pub mod behaviour;
 pub mod neighbours;
-pub mod params;
-pub mod partition;
-pub mod recording;
-pub mod report;
-pub mod simulation;
-pub mod steering;
-pub mod swarm_init;
-pub mod vector2d;
+pub mod output;
+pub mod splitting;
+pub mod world;
 
-pub use agent::Agent;
-pub use constants::*;
-pub use geometry::{toroidal_delta, wrap};
-pub use grid::Grid;
-pub use metrics::{average_neighbour_count, local_alignment, neighbour_counts, polarisation};
-pub use neighbours::{Neighbour, find_neighbours};
-pub use params::Params;
-pub use partition::Partition;
-pub use recording::Recorder;
-pub use report::{configuration_report, progress_heading, progress_line};
-pub use simulation::{run, step, step_slowly};
-pub use steering::{alignment, cohesion, separation, steer};
-pub use swarm_init::{lattice_swarm, scattered_swarm};
-pub use vector2d::Vector2D;
+pub use behaviour::simulation::{run, step, step_slowly};
+pub use behaviour::steering::{alignment, cohesion, separation, steer};
+pub use neighbours::brute_force::{Neighbour, find_neighbours};
+pub use neighbours::grid::Grid;
+pub use output::metrics::{
+    average_neighbour_count, local_alignment, neighbour_counts, polarisation,
+};
+pub use output::recording::Recorder;
+pub use output::report::{configuration_report, progress_heading, progress_line};
+pub use splitting::partition::Partition;
+pub use world::agent::Agent;
+pub use world::constants::*;
+pub use world::geometry::{toroidal_delta, wrap};
+pub use world::params::Params;
+pub use world::swarm_init::{lattice_swarm, scattered_swarm};
+pub use world::vector2d::Vector2D;
