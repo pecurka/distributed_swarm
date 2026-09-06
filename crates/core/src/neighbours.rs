@@ -25,7 +25,7 @@ pub struct Neighbour {
 /// The result is sorted by id. That is not cosmetic: the steering rules add
 /// these up, and adding decimals in a different order gives slightly different
 /// answers. The distributed version gathers its neighbours from two places (its
-/// own agents and copies from the next machine), so it would naturally end up
+/// own agents and copies from the next process), so it would naturally end up
 /// with a different order. Sorting makes both versions agree exactly.
 pub fn find_neighbours(agent: &Agent, agents: &[Agent], params: &Params) -> Vec<Neighbour> {
     let radius_squared = params.perception_radius * params.perception_radius;

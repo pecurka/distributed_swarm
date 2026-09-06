@@ -19,7 +19,7 @@ pub const DEFAULT_WORLD: Vector2D = Vector2D::new(1000.0, 1000.0);
 /// How far an agent can see (`r`).
 ///
 /// The most important knob in the project. It sets how many neighbours an agent
-/// has, and also how much data crosses between machines, since the shared
+/// has, and also how much data crosses between processes, since the shared
 /// border region has to be at least this wide.
 ///
 /// Raised from 20 to 50 because at 20 the swarm barely flocked. The number of
@@ -37,7 +37,7 @@ pub const DEFAULT_WORLD: Vector2D = Vector2D::new(1000.0, 1000.0);
 /// weights below had to come down as well before the swarm really flocked.
 ///
 /// The trade-off is that this is also the setting that decides how much data
-/// crosses between machines later, so a bigger radius means more communication.
+/// crosses between processes later, so a bigger radius means more communication.
 /// That is a real cost, not a free improvement — but a simulation that does not
 /// flock is not worth measuring.
 pub const DEFAULT_PERCEPTION_RADIUS: f64 = 50.0;
@@ -94,7 +94,7 @@ pub const DEFAULT_WEIGHT_SEPARATION: f64 = 0.15;
 pub const DEFAULT_WEIGHT_ALIGNMENT: f64 = 0.10;
 
 /// How strongly agents pull toward the middle of the group. This is what makes
-/// flocks form — and what unbalances the machines later, since agents end up
+/// flocks form — and what unbalances the processes later, since agents end up
 /// bunched together instead of spread evenly.
 pub const DEFAULT_WEIGHT_COHESION: f64 = 0.10;
 

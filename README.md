@@ -53,18 +53,43 @@ runs.
 
 ## Status
 
-The sequential baseline works. Nothing is distributed yet — `swarm-dist`
-currently only checks that the MPI toolchain functions.
+The sequential baseline works. `swarm-dist` splits the world across processes
+and simulates, but does not yet produce correct results — see below.
 
-- [x] Toolchain verified — ranks start, exchange with neighbours, and synchronise
+- [x] Toolchain verified — processes start, exchange with neighbours, synchronise
 - [x] Core model types — vectors, agents, parameters, toroidal geometry
 - [x] Sequential baseline — steering rules, uniform grid, deterministic setup
 - [x] Visualisation — record a run to CSV, draw it as a page or an SVG
-- [ ] Single-node multi-process version
-- [ ] Ghost-cell exchange + agent migration
+- [x] Splitting the world — vertical strips, one per process
+- [ ] Border sharing, so agents can see across a strip edge
+- [ ] Handing agents over when they cross a boundary
 - [ ] Fidelity comparison against the baseline
 - [ ] Benchmark harness
 - [ ] Scaling measurements
+
+### What the distributed runner does not do yet
+
+Two pieces are missing, and both make its results wrong rather than merely slow:
+
+- **Agents near a strip edge cannot see across it.** Their neighbours belong to
+  the process next door, so they steer on incomplete information and the flock
+  shows seams at the boundaries.
+- **Nobody hands agents over.** Ownership is decided once at the start and never
+  revisited, so an agent that walks into the next strip keeps being simulated by
+  the process it started in.
+
+The runner reports the second one directly, as a count of agents standing
+outside the strip that still owns them:
+
+```
+  step   agents per process (min / average / max)   strayed
+     0     239 /   250.0 /   264       0
+   600     239 /   250.0 /   264     561
+```
+
+Over half the swarm, by step 600. That column is there on purpose: without it
+the steady 1.06x imbalance reads like healthy load balance, when in fact the
+counts describe where agents *started*, not where they are.
 
 The uniform grid is checked against the every-agent-against-every-agent search:
 both must produce bit-identical results, step after step. The slow version stays
@@ -87,6 +112,7 @@ crates/core/     the model — one file per idea:
                    neighbours                           the slow, obvious search
                    grid                                 the fast search
                    steering, simulation                 the three rules, one step
+                   partition                            who owns which strip
                    metrics, report, recording           measuring and reporting
 crates/seq/      sequential baseline
 crates/dist/     distributed runner (MPI, via rsmpi)
@@ -114,7 +140,8 @@ cargo test --workspace
 cargo run --release -p swarm-seq                # default: 1000 agents, 600 steps
 cargo run --release -p swarm-seq -- 500 300     # 500 agents, 300 steps
 
-mpirun -n 4 ./target/release/swarm-dist         # distributed, 4 ranks
+mpirun -n 4 ./target/release/swarm-dist         # 4 processes, defaults
+mpirun -n 8 ./target/release/swarm-dist 2000 400  # 8 processes, 2000 agents
 ```
 
 ### Watching a run

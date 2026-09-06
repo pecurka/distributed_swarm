@@ -8,7 +8,7 @@
 //! - the model stays free of graphics libraries, so it still runs on a machine
 //!   with no screen
 //! - the distributed version can use exactly the same format, one file per
-//!   machine, merged afterwards
+//!   process, merged afterwards
 //!
 //! Recording is off unless asked for. Runs whose speed we care about write
 //! nothing but their own timings.

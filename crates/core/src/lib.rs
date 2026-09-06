@@ -14,6 +14,7 @@
 //! - [`swarm_init`] builds the starting swarm
 //! - [`neighbours`] finds the agents near an agent, the slow obvious way
 //! - [`grid`]       finds them quickly, by splitting the world into squares
+//! - [`partition`]  cuts the world into strips, one per process
 //! - [`steering`]   the three rules that make a flock
 //! - [`simulation`] moves the whole swarm forward one step
 //! - [`metrics`]    numbers describing the swarm as a whole
@@ -27,6 +28,7 @@ pub mod grid;
 pub mod metrics;
 pub mod neighbours;
 pub mod params;
+pub mod partition;
 pub mod recording;
 pub mod report;
 pub mod simulation;
@@ -41,6 +43,7 @@ pub use grid::Grid;
 pub use metrics::{average_neighbour_count, local_alignment, neighbour_counts, polarisation};
 pub use neighbours::{Neighbour, find_neighbours};
 pub use params::Params;
+pub use partition::Partition;
 pub use recording::Recorder;
 pub use report::{configuration_report, progress_heading, progress_line};
 pub use simulation::{run, step, step_slowly};

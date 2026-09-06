@@ -9,7 +9,7 @@
 //! the eight around it, so each agent only checks a handful of others rather
 //! than all of them.
 //!
-//! The squares are also how the work gets split between machines later, so the
+//! The squares are also how the work gets split between processes later, so the
 //! same structure does both jobs.
 
 use crate::{Agent, Neighbour, Params, toroidal_delta};
