@@ -4,6 +4,7 @@
     python3 analysis/render.py run.csv run.html        # interactive page
     python3 analysis/render.py run.csv --svg strip.svg  # still frames for a README
     python3 analysis/render.py run.csv --animate loop.svg  # looping animation
+    python3 analysis/render.py --compare seq.csv dist.csv both.html
 
 Uses nothing outside Python's standard library, so there is nothing to install.
 The page has all the data inside it, so it works offline and can be sent to
@@ -116,10 +117,12 @@ def read_run(path):
                 continue
             if line.startswith("step,"):
                 continue
-            step, _id, x, y, vx, vy = line.split(",")
+            fields = line.split(",")
+            step, _id, x, y, vx, vy = fields[:6]
+            process = int(fields[6]) if len(fields) > 6 else 0
             frames.setdefault(int(step), []).append(
                 [round(float(x), 1), round(float(y), 1),
-                 round(float(vx), 2), round(float(vy), 2)]
+                 round(float(vx), 2), round(float(vy), 2), process]
             )
     ordered = [{"step": step, "agents": frames[step]} for step in sorted(frames)]
     return world, ordered
@@ -199,7 +202,120 @@ def write_animated_svg(world, frames, destination, size=440, seconds=12):
           f"{destination.stat().st_size // 1000} KB")
 
 
+COMPARE_TEMPLATE = """<!doctype html>
+<html><head><meta charset="utf-8"><title>__TITLE__</title>
+<style>
+  body { margin: 0; background: #11131a; color: #c9d1d9;
+         font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { padding: 10px 14px; display: flex; gap: 14px; align-items: center;
+           border-bottom: 1px solid #262b36; flex-wrap: wrap; }
+  button { background: #1f6feb; color: #fff; border: 0; border-radius: 5px;
+           padding: 6px 14px; font: inherit; cursor: pointer; }
+  input[type=range] { width: 300px; }
+  .panels { display: flex; gap: 16px; padding: 14px; flex-wrap: wrap;
+            justify-content: center; }
+  .panel h2 { font-size: 13px; font-weight: normal; margin: 0 0 6px;
+              color: #7d8590; }
+  canvas { display: block; background: #0b0d12; border: 1px solid #262b36; }
+  .label { color: #7d8590; }
+  .note { padding: 0 14px 16px; color: #7d8590; max-width: 900px; margin: auto; }
+</style></head><body>
+<header>
+  <button id="play">Pause</button>
+  <input type="range" id="scrub" min="0" max="0" value="0">
+  <span><span class="label">step</span> <b id="stepLabel">0</b></span>
+  <span><span class="label">agents</span> <b>__AGENTS__</b></span>
+</header>
+<div class="panels">
+  <div class="panel"><h2>sequential &mdash; colour is direction</h2>
+    <canvas id="left" width="440" height="440"></canvas></div>
+  <div class="panel"><h2>distributed &mdash; colour is which process owns it</h2>
+    <canvas id="right" width="440" height="440"></canvas></div>
+</div>
+<p class="note">The dots are in the same places on both sides, at every step:
+splitting the work across processes does not change the simulation. On the
+right, the vertical bands are the strips each process looks after. Watch a dot
+change colour as it crosses a boundary &mdash; that is one process handing it to
+another.</p>
+<script>
+const LEFT = __LEFT__, RIGHT = __RIGHT__, WORLD = __WORLD__;
+const PROCESS_COLOURS = ['#4c9aff','#f0883e','#3fb950','#db61da','#e3b341',
+                         '#56d4dd','#ff7b72','#a5a5f5','#7ee787','#ffa657'];
+const scrub = document.getElementById('scrub');
+const stepLabel = document.getElementById('stepLabel');
+const playButton = document.getElementById('play');
+scrub.max = Math.min(LEFT.length, RIGHT.length) - 1;
+let index = 0, playing = true;
+
+function paint(canvasId, frame, colourByProcess) {
+  const canvas = document.getElementById(canvasId);
+  const context = canvas.getContext('2d');
+  const scaleX = canvas.width / WORLD[0], scaleY = canvas.height / WORLD[1];
+  context.fillStyle = '#0b0d12';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (colourByProcess) {
+    // Show the strip boundaries themselves.
+    const processes = new Set(frame.agents.map(a => a[4])).size;
+    context.strokeStyle = '#262b36';
+    for (let i = 1; i < processes; i++) {
+      const x = i * canvas.width / processes;
+      context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height);
+      context.stroke();
+    }
+  }
+  for (const [x, y, vx, vy, process] of frame.agents) {
+    const colour = colourByProcess
+      ? PROCESS_COLOURS[process % PROCESS_COLOURS.length]
+      : `hsl(${(Math.atan2(vy, vx) * 180 / Math.PI + 360) % 360} 70% 62%)`;
+    const screenX = x * scaleX, screenY = canvas.height - y * scaleY;
+    context.fillStyle = colour;
+    context.fillRect(screenX - 1.4, screenY - 1.4, 2.8, 2.8);
+  }
+}
+
+function draw(i) {
+  paint('left', LEFT[i], false);
+  paint('right', RIGHT[i], true);
+  stepLabel.textContent = LEFT[i].step;
+  scrub.value = i;
+}
+playButton.onclick = () => { playing = !playing;
+  playButton.textContent = playing ? 'Pause' : 'Play'; };
+scrub.oninput = () => { playing = false; playButton.textContent = 'Play';
+  index = +scrub.value; draw(index); };
+function tick() { if (playing) { index = (index + 1) % (+scrub.max + 1); draw(index); }
+  setTimeout(tick, 70); }
+draw(0); tick();
+</script></body></html>
+"""
+
+
+def write_comparison(left_path, right_path, destination):
+    """Draws two recorded runs side by side, playing in step."""
+    world, left = read_run(left_path)
+    _, right = read_run(right_path)
+    page = (COMPARE_TEMPLATE
+            .replace("__TITLE__", "sequential vs distributed")
+            .replace("__LEFT__", json.dumps(left, separators=(",", ":")))
+            .replace("__RIGHT__", json.dumps(right, separators=(",", ":")))
+            .replace("__WORLD__", json.dumps(world))
+            .replace("__AGENTS__", str(len(left[0]["agents"]))))
+    destination.write_text(page)
+    print(f"{destination}  —  {min(len(left), len(right))} frames, "
+          f"{destination.stat().st_size / 1_000_000:.1f} MB")
+
+
 def main():
+    if "--compare" in sys.argv:
+        position = sys.argv.index("--compare")
+        if position + 3 >= len(sys.argv):
+            raise SystemExit("--compare needs: sequential.csv distributed.csv out.html")
+        write_comparison(Path(sys.argv[position + 1]),
+                         Path(sys.argv[position + 2]),
+                         Path(sys.argv[position + 3]))
+        return
+
     if len(sys.argv) < 2:
         print(__doc__)
         raise SystemExit(1)

@@ -6,6 +6,7 @@
 //!     swarm-seq [agents] [steps] [--dump FILE] [--every N]
 
 use std::path::PathBuf;
+use std::time::Instant;
 
 use swarm_core::{
     DEFAULT_SWARM_SIZE, Params, Recorder, configuration_report, local_alignment, polarisation,
@@ -58,16 +59,18 @@ fn main() {
 
     if let Some(recorder) = recorder.as_mut() {
         recorder
-            .record(0, &agents)
+            .record(0, &agents, 0)
             .expect("could not record step 0");
     }
+
+    let started_run = Instant::now();
 
     for current_step in 1..=steps {
         agents = step(&agents, &params);
 
         if let Some(recorder) = recorder.as_mut() {
             recorder
-                .record(current_step, &agents)
+                .record(current_step, &agents, 0)
                 .expect("could not record a step");
         }
         if current_step % REPORT_EVERY == 0 || current_step == steps {
@@ -85,9 +88,22 @@ fn main() {
         }
     }
 
+    let wall_clock = started_run.elapsed();
+
     if let Some(recorder) = recorder {
         recorder.finish().expect("could not finish the recording");
     }
+
+    // The baseline every distributed run is measured against. Note this
+    // includes the flocking numbers printed along the way, which cost about as
+    // much as a step each — so record without `--dump` and compare like with
+    // like.
+    println!();
+    println!(
+        "  wall clock        {:.3}s   ({:.3}ms per step)",
+        wall_clock.as_secs_f64(),
+        1000.0 * wall_clock.as_secs_f64() / steps.max(1) as f64
+    );
 
     // One number summarising the exact final state. The distributed runner
     // prints the same thing, so the two can be compared directly.

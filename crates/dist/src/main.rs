@@ -12,13 +12,17 @@
 
 mod constants;
 
+use std::path::PathBuf;
+use std::time::Instant;
+
 use constants::ROOT_RANK;
 use mpi::collective::SystemOperation;
 use mpi::traits::*;
 use swarm_core::{
-    Agent, DEFAULT_SWARM_SIZE, Params, Partition, agents_to_send_left, agents_to_send_right,
-    configuration_report, decode_from_numbers, encode_to_numbers, scattered_swarm,
-    sort_agents_by_destination, state_fingerprint, step_with_ghosts,
+    Agent, DEFAULT_SWARM_SIZE, Params, Partition, Recorder, Timings, agents_to_send_left,
+    agents_to_send_right, configuration_report, decode_from_numbers, encode_to_numbers,
+    scattered_swarm, sort_agents_by_destination, state_fingerprint, step_with_ghosts,
+    timing_report,
 };
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
@@ -29,6 +33,8 @@ const ARG_STEPS: usize = 2;
 const DEFAULT_STEPS: u64 = 600;
 /// How often to print a progress line.
 const REPORT_EVERY: u64 = 100;
+/// How many steps to skip between saved snapshots, when saving.
+const DEFAULT_RECORD_EVERY: u64 = 5;
 
 fn main() {
     let universe = mpi::initialize().expect("MPI failed to initialise");
@@ -39,6 +45,9 @@ fn main() {
     let params = Params::default();
     let swarm_size = numeric_argument(ARG_SWARM_SIZE).unwrap_or(DEFAULT_SWARM_SIZE);
     let steps = numeric_argument(ARG_STEPS).unwrap_or(DEFAULT_STEPS);
+    let record_every = flag_value("--every")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(DEFAULT_RECORD_EVERY);
 
     let partition = Partition::for_process(rank as usize, process_count as usize, &params);
 
@@ -78,19 +87,57 @@ fn main() {
 
     report_spread(&world, rank, 0, &mine, &partition, &params, swarm_size);
 
+    // Runs that measure overall speed leave the extra barrier out; runs that
+    // measure where the time goes put it in. See `swarm_core::output::timing`.
+    let measure_phases = std::env::args().any(|argument| argument == "--measure-phases");
+
+    // Recording is off unless asked for, so measurement runs pay nothing.
+    // Only the root process writes: it gathers everyone's agents so the file
+    // holds one whole swarm per step, the same shape the sequential runner
+    // produces.
+    let mut recorder = flag_value("--dump").map(PathBuf::from).map(|path| {
+        let recorder = Recorder::create(&path, record_every, &params)
+            .unwrap_or_else(|error| panic!("could not write to {}: {error}", path.display()));
+        if rank == ROOT_RANK {
+            println!("recording to {} every {record_every} steps", path.display());
+        }
+        recorder
+    });
+    record_everyones_agents(&world, rank, recorder.as_mut(), 0, &mine);
+
+    // The copies our agents will look at in the first step. After that, each
+    // step ends by preparing the copies the next one needs.
+    let mut ghosts = swap_border_agents(&world, &partition, &mine, &params);
+    let mut timings = Timings::default();
+    let started_run = Instant::now();
+
     for current_step in 1..=steps {
-        // Swap copies of the agents along our edges with the two processes next
-        // door, so our edge agents can see across the boundary.
-        let ghosts = swap_border_agents(&world, &partition, &mine, &params);
-
+        // 1. The simulation work itself.
+        let started = Instant::now();
         mine = step_with_ghosts(&mine, &ghosts, &params);
+        timings.computing += started.elapsed();
 
-        // Anyone who walked into a neighbour's strip now becomes theirs.
+        // 2. Wait for everyone to finish computing. This is what stops time
+        //    lost to uneven load from being counted as communication.
+        if measure_phases {
+            let started = Instant::now();
+            world.barrier();
+            timings.waiting_for_others += started.elapsed();
+        }
+
+        // 3. Hand over anyone who crossed a border, then prepare the copies for
+        //    the next step.
+        let started = Instant::now();
         mine = hand_over_agents(&world, &partition, mine, &params);
+        ghosts = swap_border_agents(&world, &partition, &mine, &params);
+        timings.communicating += started.elapsed();
 
-        // Everyone waits for the slowest before starting the next step. Time
-        // spent here is time lost to uneven load.
+        // 4. Nobody starts the next step until everyone has finished this one.
+        let started = Instant::now();
         world.barrier();
+        timings.finishing_together += started.elapsed();
+
+        record_everyones_agents(&world, rank, recorder.as_mut(), current_step, &mine);
 
         if current_step.is_multiple_of(REPORT_EVERY) || current_step == steps {
             report_spread(
@@ -101,6 +148,29 @@ fn main() {
                 &partition,
                 &params,
                 swarm_size,
+            );
+        }
+    }
+
+    if let Some(recorder) = recorder {
+        recorder.finish().expect("could not finish the recording");
+    }
+
+    let wall_clock = started_run.elapsed();
+    let slowest = slowest_across_processes(&world, &timings);
+    if rank == ROOT_RANK {
+        println!();
+        println!("  wall clock        {:.3}s", wall_clock.as_secs_f64());
+        if !measure_phases {
+            println!("  (pass --measure-phases to see where the time went)");
+        }
+        println!();
+        print!("{}", timing_report(&slowest, steps));
+        if measure_phases {
+            println!(
+                "  (each part is the slowest process's figure, so they add up to\n   \
+                 more than the wall clock — different processes are slowest at\n   \
+                 different parts)"
             );
         }
     }
@@ -158,6 +228,72 @@ fn report_spread(
         "  {step_number:>4}   {smallest:>5} / {average:>7.1} / {largest:>5}   \
          {strayed_total:>5}   (busiest {imbalance:.2}x average)"
     );
+}
+
+/// Gathers everyone's agents onto the root process so it can write one file.
+///
+/// Each group is written with the number of the process that owns it, so a
+/// drawing can colour agents by owner — which makes hand-overs at the borders,
+/// and strips filling up unevenly, visible at a glance.
+///
+/// Costs a round of messages, so it only happens on steps that are being
+/// recorded, and only when recording was asked for at all.
+fn record_everyones_agents(
+    world: &mpi::topology::SimpleCommunicator,
+    rank: i32,
+    recorder: Option<&mut Recorder>,
+    step_number: u64,
+    mine: &[Agent],
+) {
+    let Some(recorder) = recorder else {
+        return;
+    };
+    if !recorder.is_recording_step(step_number) {
+        return;
+    }
+
+    if rank != ROOT_RANK {
+        world
+            .process_at_rank(ROOT_RANK)
+            .send(&encode_to_numbers(mine)[..]);
+        return;
+    }
+
+    recorder
+        .record(step_number, mine, ROOT_RANK as usize)
+        .expect("could not record a step");
+    for other in 0..world.size() {
+        if other == ROOT_RANK {
+            continue;
+        }
+        let (numbers, _status) = world.process_at_rank(other).receive_vec::<f64>();
+        recorder
+            .record(step_number, &decode_from_numbers(&numbers), other as usize)
+            .expect("could not record a step");
+    }
+}
+
+/// The slowest process's time for each part.
+///
+/// Every process has its own four numbers. What matters is the slowest, because
+/// at every barrier everyone else is waiting for it — the run only goes as fast
+/// as its slowest part.
+fn slowest_across_processes(
+    world: &mpi::topology::SimpleCommunicator,
+    timings: &Timings,
+) -> Timings {
+    let slowest = |part: std::time::Duration| {
+        let mine = part.as_secs_f64();
+        let mut worst = 0.0;
+        world.all_reduce_into(&mine, &mut worst, SystemOperation::max());
+        std::time::Duration::from_secs_f64(worst)
+    };
+    Timings {
+        computing: slowest(timings.computing),
+        waiting_for_others: slowest(timings.waiting_for_others),
+        communicating: slowest(timings.communicating),
+        finishing_together: slowest(timings.finishing_together),
+    }
 }
 
 /// Collects every process's agents onto the root process and prints one number
@@ -264,6 +400,13 @@ fn swap_border_agents(
         ghosts.extend(decode_from_numbers(&arrived));
     }
     ghosts
+}
+
+/// Reads the value that follows a named flag, as in `--dump run.csv`.
+fn flag_value(name: &str) -> Option<String> {
+    let arguments: Vec<String> = std::env::args().collect();
+    let position = arguments.iter().position(|argument| argument == name)?;
+    arguments.get(position + 1).cloned()
 }
 
 /// Reads one number from a fixed position on the command line.

@@ -35,28 +35,42 @@ impl Recorder {
         // The drawing program needs to know how big the world is, and it
         // cannot tell from the positions alone.
         writeln!(writer, "# world {} {}", params.world.x, params.world.y)?;
-        writeln!(writer, "step,id,x,y,velocity_x,velocity_y")?;
+        writeln!(writer, "step,id,x,y,velocity_x,velocity_y,process")?;
         Ok(Self {
             writer,
             every: every.max(1),
         })
     }
 
+    /// Whether this is a step we are saving.
+    ///
+    /// Worth asking before gathering agents from other processes, so a step
+    /// that is not being saved costs nothing at all.
+    pub fn is_recording_step(&self, step_number: u64) -> bool {
+        step_number.is_multiple_of(self.every)
+    }
+
     /// Saves a snapshot, if this is a step we are saving.
-    pub fn record(&mut self, step_number: u64, agents: &[Agent]) -> Result<()> {
-        if !step_number.is_multiple_of(self.every) {
+    ///
+    /// `process` is which process owns these agents. The sequential runner
+    /// passes 0, since it is the only one. The distributed runner passes each
+    /// process's own number, which lets a drawing colour agents by owner and
+    /// show hand-overs happening.
+    pub fn record(&mut self, step_number: u64, agents: &[Agent], process: usize) -> Result<()> {
+        if !self.is_recording_step(step_number) {
             return Ok(());
         }
         for agent in agents {
             writeln!(
                 self.writer,
-                "{},{},{:.3},{:.3},{:.3},{:.3}",
+                "{},{},{:.3},{:.3},{:.3},{:.3},{}",
                 step_number,
                 agent.id,
                 agent.position.x,
                 agent.position.y,
                 agent.velocity.x,
-                agent.velocity.y
+                agent.velocity.y,
+                process
             )?;
         }
         Ok(())
@@ -91,7 +105,10 @@ mod tests {
             lines.next().unwrap(),
             format!("# world {} {}", params.world.x, params.world.y)
         );
-        assert_eq!(lines.next().unwrap(), "step,id,x,y,velocity_x,velocity_y");
+        assert_eq!(
+            lines.next().unwrap(),
+            "step,id,x,y,velocity_x,velocity_y,process"
+        );
         fs::remove_file(&path).ok();
     }
 
@@ -102,8 +119,8 @@ mod tests {
         let path = temporary_path("rows");
 
         let mut recorder = Recorder::create(&path, 1, &params).unwrap();
-        recorder.record(0, &agents).unwrap();
-        recorder.record(1, &agents).unwrap();
+        recorder.record(0, &agents, 0).unwrap();
+        recorder.record(1, &agents, 0).unwrap();
         recorder.finish().unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
@@ -122,7 +139,7 @@ mod tests {
 
         let mut recorder = Recorder::create(&path, 3, &params).unwrap();
         for step_number in 0..9 {
-            recorder.record(step_number, &agents).unwrap();
+            recorder.record(step_number, &agents, 0).unwrap();
         }
         recorder.finish().unwrap();
 
@@ -142,7 +159,7 @@ mod tests {
         let params = Params::default();
         let path = temporary_path("zero");
         let mut recorder = Recorder::create(&path, 0, &params).unwrap();
-        recorder.record(1, &scattered_swarm(1, &params)).unwrap();
+        recorder.record(1, &scattered_swarm(1, &params), 0).unwrap();
         recorder.finish().unwrap();
         fs::remove_file(&path).ok();
     }
