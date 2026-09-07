@@ -6,6 +6,7 @@
 # with `git add -f`.
 data/*.csv
 data/*.html
+data/*.log
 
 # Editor settings that make the project build and lint correctly are committed.
 # Anything else under .vscode is personal.

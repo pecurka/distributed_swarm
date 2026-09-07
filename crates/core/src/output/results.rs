@@ -37,6 +37,15 @@ pub struct RunResult<'a> {
     /// sequential run.
     pub smallest_process_load: usize,
     pub largest_process_load: usize,
+    /// How uneven the load was, averaged over the whole run, and at its worst.
+    ///
+    /// The busiest process divided by the average, so 1.0 is perfectly even.
+    /// Measured all the way through rather than only at the end: a run that
+    /// stays balanced until the last moment and one that goes bad immediately
+    /// look identical at the finish line, and they cost completely different
+    /// amounts.
+    pub average_imbalance: f64,
+    pub worst_imbalance: f64,
     /// Identifies the exact final state, so rows can be checked against each
     /// other.
     pub fingerprint: u64,
@@ -44,7 +53,7 @@ pub struct RunResult<'a> {
 
 const HEADER: &str = "runner,processes,agents,steps,simulating_seconds,wall_clock_seconds,\
 computing_seconds,waiting_seconds,communicating_seconds,finishing_seconds,measured_phases,\
-smallest_process_load,largest_process_load,fingerprint";
+smallest_process_load,largest_process_load,average_imbalance,worst_imbalance,fingerprint";
 
 /// Adds one row, writing the header first if the file is new.
 pub fn append_result(path: &Path, result: &RunResult) -> Result<()> {
@@ -60,7 +69,7 @@ pub fn append_result(path: &Path, result: &RunResult) -> Result<()> {
 /// One row, without writing it anywhere. Split out so it can be tested.
 pub fn format_row(result: &RunResult) -> String {
     format!(
-        "{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{:016x}",
+        "{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{:.4},{:.4},{:016x}",
         result.runner,
         result.processes,
         result.agents,
@@ -74,6 +83,8 @@ pub fn format_row(result: &RunResult) -> String {
         result.measured_phases,
         result.smallest_process_load,
         result.largest_process_load,
+        result.average_imbalance,
+        result.worst_imbalance,
         result.fingerprint
     )
 }
@@ -100,6 +111,8 @@ mod tests {
             measured_phases: true,
             smallest_process_load: 180,
             largest_process_load: 340,
+            average_imbalance: 1.42,
+            worst_imbalance: 2.11,
             fingerprint: 0x475a_1e24_4ee7_5967,
         }
     }

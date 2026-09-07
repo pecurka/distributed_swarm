@@ -33,6 +33,12 @@ const ARG_STEPS: usize = 2;
 const DEFAULT_STEPS: u64 = 600;
 /// How often to print a progress line.
 const REPORT_EVERY: u64 = 100;
+/// How often to check how evenly the work is spread.
+///
+/// Every step would mean two extra collective operations per step. Every tenth
+/// gives the same picture of how imbalance develops for a tenth of the cost.
+/// This sits outside the timed phases either way, so it cannot affect speedup.
+const IMBALANCE_SAMPLE_EVERY: u64 = 10;
 /// How many steps to skip between saved snapshots, when saving.
 const DEFAULT_RECORD_EVERY: u64 = 5;
 
@@ -109,6 +115,13 @@ fn main() {
     // step ends by preparing the copies the next one needs.
     let mut ghosts = swap_border_agents(&world, &partition, &mine, &params);
     let mut timings = Timings::default();
+    // Imbalance is measured every step and kept, not sampled at the end. A run
+    // that stays balanced until the last moment and one that goes bad
+    // immediately look identical at the finish line, and they cost completely
+    // different amounts.
+    let mut imbalance_total = 0.0;
+    let mut imbalance_worst: f64 = 0.0;
+    let mut imbalance_samples = 0u64;
     let started_run = Instant::now();
 
     for current_step in 1..=steps {
@@ -136,6 +149,14 @@ fn main() {
         let started = Instant::now();
         world.barrier();
         timings.finishing_together += started.elapsed();
+
+        if current_step.is_multiple_of(IMBALANCE_SAMPLE_EVERY) {
+            let (_, busiest) = load_spread(&world, mine.len());
+            let imbalance = busiest as f64 / (swarm_size as f64 / process_count as f64);
+            imbalance_total += imbalance;
+            imbalance_worst = imbalance_worst.max(imbalance);
+            imbalance_samples += 1;
+        }
 
         record_everyones_agents(&world, rank, recorder.as_mut(), current_step, &mine);
 
@@ -209,6 +230,8 @@ fn main() {
                 measured_phases: measure_phases,
                 smallest_process_load: smallest,
                 largest_process_load: largest,
+                average_imbalance: imbalance_total / imbalance_samples.max(1) as f64,
+                worst_imbalance: imbalance_worst,
                 fingerprint,
             },
         )

@@ -140,6 +140,10 @@ fn main() {
                 measured_phases: false,
                 smallest_process_load: agents.len(),
                 largest_process_load: agents.len(),
+                // One process holds everything, so it is perfectly balanced
+                // with itself by definition.
+                average_imbalance: 1.0,
+                worst_imbalance: 1.0,
                 fingerprint,
             },
         )
