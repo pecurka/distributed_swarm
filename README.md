@@ -71,22 +71,25 @@ itself.
 
 ```
 Cargo.toml       workspace
-crates/core/     the model — one file per idea:
-                   vector2d, agent, params, constants   the pieces
-                   geometry                             wrap-around distances
-                   neighbours/brute_force               the slow, obvious search
-                   neighbours/grid                      the fast search
-                   steering, simulation                 the three rules, one step
-                   partition, borders, migration        who owns which strip,
-                                                        what is copied across it,
-                                                        and what moves between
-                   metrics, report, recording, timing   measuring and reporting
+
+crates/core/     the model — grouped by what each part is for
+  world/           vector2d, geometry, agent, params, constants, swarm_init
+  neighbours/      brute_force (the slow, obvious search), grid (the fast one)
+  behaviour/       steering (the three rules), simulation (one step)
+  splitting/       partition (who owns which strip), borders (what is copied
+                   across one), migration (what moves between them)
+  output/          metrics, report, recording, timing, results
+
 crates/seq/      sequential baseline
 crates/dist/     distributed runner (MPI, via rsmpi)
-bench/           sweep.sh, sweep-sizes.sh
+
+bench/           sweep.sh, sweep-sizes.sh — the measurement runs
+analysis/        render.py  a recorded run as a page or an SVG
+                 results.py the measurement tables
+                 report.py  the charts, English and Serbian
 data/            recorded runs and results (gitignored; real results added
                  deliberately with `git add -f`)
-analysis/        results.py — the tables; report.py — the charts
+images/          figures used by this README
 ```
 
 ## Building and running
