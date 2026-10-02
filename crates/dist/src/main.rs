@@ -11,10 +11,11 @@
 //! world with the swarm instead, which is what makes swarm size mean "bigger
 //! problem".
 //!
-//! Not finished. Agents near a strip's edge have neighbours belonging to the
-//! process next door and cannot see them yet, so they steer wrongly and the
-//! flock shows seams at the boundaries. Swapping copies of edge agents between
-//! neighbours is the next piece of work.
+//! Agents near a strip's edge can have neighbours belonging to the process next
+//! door. Every step, each process sends its neighbours read-only copies of the
+//! agents within one perception radius of the shared edge, and hands over any
+//! agent that crossed into a neighbour's strip. The result matches the
+//! sequential runner bit for bit.
 
 mod constants;
 
