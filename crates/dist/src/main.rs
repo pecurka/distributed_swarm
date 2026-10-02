@@ -288,9 +288,9 @@ fn report_spread(
     params: &Params,
     swarm_size: u64,
 ) {
-    // Agents that have walked out of the strip that still owns them. Nothing
-    // hands them over yet, so this only ever grows — and while it is above
-    // zero, the counts above describe where agents started, not where they are.
+    // Agents standing outside the strip of the process that owns them. Agents
+    // are handed over at the end of every step, so this should always be zero;
+    // anything else means a hand-over went wrong.
     let strayed = agents
         .iter()
         .filter(|agent| !partition.owns_agent(agent, params))
