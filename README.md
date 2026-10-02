@@ -84,7 +84,8 @@ crates/core/     the model — grouped by what each part is for
 crates/seq/      sequential baseline
 crates/dist/     distributed runner (MPI, via rsmpi)
 
-bench/           sweep.sh, sweep-sizes.sh, sweep-density.sh — the measurement runs
+bench/           sweep.sh, sweep-sizes.sh, sweep-density.sh, sweep-weak.sh —
+                 the measurement runs
 analysis/        render.py  a recorded run as a page or an SVG
                  results.py the measurement tables
                  report.py  the charts, English and Serbian
@@ -199,6 +200,7 @@ a median.
 bench/sweep.sh                              # strong and weak scaling, one swarm size
 bench/sweep-sizes.sh                        # strong scaling across swarm sizes
 bench/sweep-density.sh                      # the same, holding crowding fixed
+bench/sweep-weak.sh                         # weak scaling: same agents per process, both setups
 REPEATS=3 STEPS=200 bench/sweep.sh          # a quicker version
 
 python3 analysis/results.py                 # the tables, both setups and the comparison

@@ -35,6 +35,10 @@ PHASE_NAMES = ["computing", "waiting for others", "communicating",
                "finishing together"]
 
 
+# How many agents each process holds in the weak-scaling runs. Must match
+# PER_PROCESS in bench/sweep-weak.sh.
+WEAK_PER_PROCESS = [500, 2000]
+
 # The two ways a run can size its world. See `setups_of`.
 FIXED_WORLD = "fixed_world"
 CONSTANT_DENSITY = "constant_density"
@@ -154,6 +158,56 @@ def imbalance_table(grouped, sizes, processes):
     return table
 
 
+def throughput(runs, agents, steps):
+    """Agent-steps per second: how many agents were moved forward one step, per second.
+
+    Unlike speedup, this can be compared across swarm sizes: it says how much
+    simulating got done, not how much faster one run was than another.
+    """
+    return agents * steps / middle(runs, "simulating_seconds")
+
+
+def throughput_table(grouped, steps, sizes, processes):
+    """Agent-steps per second for every swarm size and process count."""
+    table = {}
+    for agents in sizes:
+        for count in processes:
+            runs = grouped.get(("distributed", count, agents, False))
+            if runs:
+                table[(agents, count)] = throughput(runs, agents, steps)
+    return table
+
+
+def weak_table(grouped, steps, per_process, processes):
+    """Weak scaling: every process holds `per_process` agents, however many there are.
+
+    For each process count: how long a step took, how much work got done per
+    second, and the efficiency. Efficiency is the time at one process divided by
+    the time at this many. 100% means adding processes, and agents with them,
+    cost nothing extra; less means splitting the work has a price.
+
+    Empty if the one-process run, which everything is measured against, is
+    missing.
+    """
+    baseline = grouped.get(("distributed", 1, per_process, False))
+    if not baseline:
+        return {}
+    one_process = middle(baseline, "simulating_seconds")
+    table = {}
+    for count in processes:
+        agents = per_process * count
+        runs = grouped.get(("distributed", count, agents, False))
+        if not runs:
+            continue
+        seconds = middle(runs, "simulating_seconds")
+        table[count] = {
+            "milliseconds_per_step": 1000 * seconds / steps,
+            "efficiency": 100 * one_process / seconds,
+            "throughput": throughput(runs, agents, steps),
+        }
+    return table
+
+
 def summary_at(grouped, steps, agents, count):
     """One swarm size in one setup, boiled down to the numbers the comparison uses.
 
@@ -231,6 +285,24 @@ def print_tables(grouped, steps, sizes, processes):
         row = "".join(f"{imbalance.get((agents, c), float('nan')):>8.2f}x"
                       for c in processes)
         print(f"{agents:>8}  {row}")
+
+    rates = throughput_table(grouped, steps, sizes, processes)
+    print("\nTHROUGHPUT  (million agent-steps per second)")
+    print("  agents  " + "".join(f"{count:>9}" for count in processes))
+    for agents in sizes:
+        row = "".join(f"{rates.get((agents, c), float('nan')) / 1e6:>9.2f}"
+                      for c in processes)
+        print(f"{agents:>8}  {row}")
+
+    for per_process in WEAK_PER_PROCESS:
+        weak = weak_table(grouped, steps, per_process, processes)
+        if not weak:
+            continue
+        print(f"\nWEAK SCALING  ({per_process} agents per process)")
+        print("  processes   ms per step   efficiency   million agent-steps/s")
+        for count, row in weak.items():
+            print(f"{count:>11}  {row['milliseconds_per_step']:>12.2f}  "
+                  f"{row['efficiency']:>10.0f}%  {row['throughput'] / 1e6:>22.2f}")
 
     print(f"\nWHERE THE TIME WENT at {biggest} processes  (share of a step)")
     phases = phase_table(grouped, sizes, biggest)

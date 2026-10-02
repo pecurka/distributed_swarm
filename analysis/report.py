@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from results import (  # noqa: E402  (path has to be set first)
     CONSTANT_DENSITY,
     FIXED_WORLD,
+    WEAK_PER_PROCESS,
     crowding_table,
     imbalance_table,
     load,
@@ -27,6 +28,8 @@ from results import (  # noqa: E402  (path has to be set first)
     phase_table,
     sizes_and_processes,
     speedup_table,
+    throughput_table,
+    weak_table,
 )
 
 # reader who learns "16000 agents is blue" must not have it repainted.
@@ -164,6 +167,41 @@ STRINGS = {
         "col_imbalance": "imbalance",
         "col_waiting": "waiting %",
         "col_communicating": "communicating %",
+        "q6": "Question 6 &middot; weak scaling",
+        "q6_h": "{biggest} processes do {roomy_gain:.1f}&times; the work of one, not {biggest}&times;",
+        "q6_p": "Here each process always holds {per_process} agents, so if "
+                "splitting the work were free a step would take as long at every "
+                "process count: 100% on this chart. With constant density, "
+                "{biggest} processes keep {roomy_efficiency:.0f}% of that. In the "
+                "fixed world they keep {crowded_efficiency:.0f}%, because the "
+                "extra agents also crowd every process&rsquo;s own agents, so "
+                "each process&rsquo;s work grows even though its agent count "
+                "does not.",
+        "q6_p2": "Throughput is the number of agents moved forward one step each "
+                 "second. With constant density it rises from "
+                 "{roomy_one:.2f} million at one process to {roomy_many:.2f} "
+                 "million at {biggest}, {roomy_gain:.1f}&times; as much. In the "
+                 "fixed world it goes from {crowded_one:.2f} to "
+                 "{crowded_many:.2f} million: the extra processes are used up "
+                 "by the extra crowding.",
+        "q6_callout_h": "Where the rest goes",
+        "q6_callout_p": "The gap between {roomy_gain:.1f}&times; and "
+                        "{biggest}&times; is the cost of splitting the work: "
+                        "processes waiting at the end of each step for the "
+                        "busiest one, and the border copies sent between "
+                        "neighbours. Question 3 shows that waiting is by far "
+                        "the larger of the two.",
+        "ideal": "if splitting were free",
+        "aria_weak": "Weak-scaling efficiency against process count, in the fixed world and with constant density",
+        "aria_throughput": "Million agent-steps per second against process count, in the fixed world and with constant density",
+        "tip_weak": "{setup}, {count} processes: {value}",
+        "table_weak": "Weak scaling, every configuration",
+        "table_throughput": "Throughput, million agent-steps per second",
+        "col_per_process": "agents per process",
+        "col_setup": "setup",
+        "col_ms_step": "ms per step",
+        "col_efficiency": "efficiency",
+        "col_throughput": "million agent-steps/s",
         "table_speedup": "Speedup, every configuration",
         "table_phases": "Share of a step at {biggest} processes",
         "table_imbalance": "Average imbalance, every configuration",
@@ -300,6 +338,38 @@ STRINGS = {
         "col_imbalance": "neravnoteža",
         "col_waiting": "čekanje %",
         "col_communicating": "komunikacija %",
+        "q6": "Pitanje 6 &middot; slabo skaliranje",
+        "q6_h": "{biggest} procesa uradi {roomy_gain:.1f}&times; više posla od jednog, a ne {biggest}&times;",
+        "q6_p": "Ovde svaki proces uvek ima {per_process} agenata, pa bi, kada bi "
+                "podela posla bila besplatna, korak trajao isto pri svakom broju "
+                "procesa: 100% na ovom grafikonu. Pri stalnoj gustini {biggest} "
+                "procesa zadržava {roomy_efficiency:.0f}% od toga. U "
+                "nepromenljivom svetu zadržava {crowded_efficiency:.0f}%, jer "
+                "dodatni agenti zbijaju i agente svakog procesa, pa posao "
+                "svakog procesa raste iako broj njegovih agenata ostaje isti.",
+        "q6_p2": "Propusnost je broj agenata pomerenih za jedan korak u sekundi. "
+                 "Pri stalnoj gustini raste sa {roomy_one:.2f} miliona pri "
+                 "jednom procesu na {roomy_many:.2f} miliona pri {biggest}, "
+                 "{roomy_gain:.1f}&times; više. U nepromenljivom svetu ide sa "
+                 "{crowded_one:.2f} na {crowded_many:.2f} miliona: dodatne "
+                 "procese potroši dodatna gustina.",
+        "q6_callout_h": "Gde odlazi ostatak",
+        "q6_callout_p": "Razlika između {roomy_gain:.1f}&times; i "
+                        "{biggest}&times; je cena podele posla: procesi na kraju "
+                        "svakog koraka čekaju najopterećenijeg, a susedi "
+                        "razmenjuju kopije graničnih agenata. Pitanje 3 "
+                        "pokazuje da je čekanje daleko veće od to dvoje.",
+        "ideal": "kada bi podela bila besplatna",
+        "aria_weak": "Efikasnost slabog skaliranja u odnosu na broj procesa, u nepromenljivom svetu i pri stalnoj gustini",
+        "aria_throughput": "Miliona agent-koraka u sekundi u odnosu na broj procesa, u nepromenljivom svetu i pri stalnoj gustini",
+        "tip_weak": "{setup}, {count} procesa: {value}",
+        "table_weak": "Slabo skaliranje, sve konfiguracije",
+        "table_throughput": "Propusnost, miliona agent-koraka u sekundi",
+        "col_per_process": "agenata po procesu",
+        "col_setup": "postavka",
+        "col_ms_step": "ms po koraku",
+        "col_efficiency": "efikasnost",
+        "col_throughput": "miliona agent-koraka/s",
         "table_speedup": "Ubrzanje, sve konfiguracije",
         "table_phases": "Udeo koraka pri {biggest} procesa",
         "table_imbalance": "Prosečna neravnoteža, sve konfiguracije",
@@ -557,6 +627,69 @@ def setup_chart(series, label_of_value, axis_label, aria, tip, logarithmic):
     return "\n".join(out)
 
 
+def process_chart(series, label_of_value, aria, tip, reference=None, value_heading=None):
+    """One line per setup, against process count.
+
+    `series` is a list of (setup name, {process count: value}), fixed world
+    first, drawn solid and dashed like `setup_chart`. `reference`, if given,
+    is a value to draw as a thin dotted line across the chart, such as the
+    100% a perfect result would reach. `value_heading`, if given, is written
+    above the chart to say what the vertical axis counts, for values whose
+    tick labels cannot carry their own unit.
+    """
+    width, height = 620, 360
+    pad = {"left": 64, "top": 36 if value_heading else 16, "right": 24, "bottom": 48}
+    left, top, right, bottom = axes(width, height, pad)
+    processes = sorted({count for _, values in series for count in values})
+    values = [value for _, by_count in series for value in by_count.values()]
+    if reference is not None:
+        values.append(reference)
+    highest = max(values) * 1.1
+    # Four or five gridlines whatever the range, on round numbers.
+    spacing = 10 ** math.floor(math.log10(highest / 4))
+    for multiple in (1, 2, 5, 10):
+        if highest / (spacing * multiple) <= 5:
+            spacing *= multiple
+            break
+
+    def x_of(count):
+        return left + (count - processes[0]) / (processes[-1] - processes[0]) * (right - left)
+
+    def y_of(value):
+        return bottom - value / highest * (bottom - top)
+
+    out = [f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{aria}">']
+    if value_heading:
+        out.append(f'<text class="axis" x="{left - 8}" y="12">{value_heading}</text>')
+    tick = 0.0
+    while tick <= highest:
+        y = y_of(tick)
+        out.append(f'<line class="grid" x1="{left}" y1="{y:.1f}" x2="{right}" y2="{y:.1f}"/>')
+        out.append(f'<text class="tick" x="{left - 8}" y="{y + 4:.1f}" '
+                   f'text-anchor="end">{label_of_value(tick)}</text>')
+        tick += spacing
+    for count in processes:
+        out.append(f'<text class="tick" x="{x_of(count):.1f}" y="{bottom + 20}" '
+                   f'text-anchor="middle">{count}</text>')
+    out.append(f'<text class="axis" x="{(left + right) / 2:.0f}" y="{height - 8}" '
+               f'text-anchor="middle">{TEXT["processes"]}</text>')
+    if reference is not None:
+        y = y_of(reference)
+        out.append(f'<line class="reference" x1="{left}" y1="{y:.1f}" x2="{right}" y2="{y:.1f}"/>')
+
+    for style, (name, by_count) in zip(["fixed", "grown"], series):
+        points = [(x_of(count), y_of(by_count[count]), count) for count in sorted(by_count)]
+        path = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f} {y:.1f}"
+                        for i, (x, y, _) in enumerate(points))
+        out.append(f'<path class="setup {style}" d="{path}"/>')
+        for x, y, count in points:
+            label = tip.format(setup=name, count=count, value=label_of_value(by_count[count]))
+            out.append(f'<circle class="setup-dot {style}" cx="{x:.1f}" cy="{y:.1f}" '
+                       f'r="4" data-label="{label}"/>')
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 def setup_swatches():
     return (f'<span class="key"><i class="line fixed"></i>{TEXT["setup_fixed"]}</span>'
             f'<span class="key"><i class="line grown"></i>{TEXT["setup_grown"]}</span>')
@@ -661,6 +794,77 @@ def crowding_section(fixed_world, constant_density):
 """
 
 
+def weak_section(fixed_world, constant_density, processes):
+    """Weak scaling and throughput, in both setups.
+
+    Charts the largest per-process count measured in both setups, since
+    small swarms are dominated by fixed costs. The table has every one.
+    Empty when there are no weak-scaling runs.
+    """
+    setups = [(TEXT["setup_fixed"], fixed_world), (TEXT["setup_grown"], constant_density)]
+    tables = {}
+    for per_process in WEAK_PER_PROCESS:
+        for name, (grouped, steps) in setups:
+            table = weak_table(grouped, steps, per_process, processes)
+            if table:
+                tables[(per_process, name)] = table
+    charted = [per_process for per_process in WEAK_PER_PROCESS
+               if all((per_process, name) in tables for name, _ in setups)]
+    if not charted:
+        return ""
+    per_process = charted[-1]
+    crowded, roomy = (tables[(per_process, name)] for name, _ in setups)
+    biggest = max(set(crowded) & set(roomy))
+
+    efficiency = [(name, {count: row["efficiency"] for count, row in tables[(per_process, name)].items()})
+                  for name, _ in setups]
+    rates = [(name, {count: row["throughput"] / 1e6 for count, row in tables[(per_process, name)].items()})
+             for name, _ in setups]
+
+    rows = []
+    for (each, name), table in tables.items():
+        for count, row in table.items():
+            rows.append([number(each), name, count, f"{row['milliseconds_per_step']:.2f}",
+                         f"{row['efficiency']:.0f}%", f"{row['throughput'] / 1e6:.2f}"])
+    headings = [TEXT["col_per_process"], TEXT["col_setup"], TEXT["processes"],
+                TEXT["col_ms_step"], TEXT["col_efficiency"], TEXT["col_throughput"]]
+    figures = dict(per_process=number(per_process), biggest=biggest,
+                   agents=number(per_process * biggest),
+                   crowded_efficiency=crowded[biggest]["efficiency"],
+                   roomy_efficiency=roomy[biggest]["efficiency"],
+                   crowded_one=crowded[1]["throughput"] / 1e6,
+                   roomy_one=roomy[1]["throughput"] / 1e6,
+                   crowded_many=crowded[biggest]["throughput"] / 1e6,
+                   roomy_many=roomy[biggest]["throughput"] / 1e6,
+                   crowded_gain=crowded[biggest]["throughput"] / crowded[1]["throughput"],
+                   roomy_gain=roomy[biggest]["throughput"] / roomy[1]["throughput"])
+    return f"""
+<section>
+  <span class="eyebrow">{TEXT['q6']}</span>
+  <h2>{TEXT['q6_h'].format(**figures)}</h2>
+  <p class="lede">{TEXT['q6_p'].format(**figures)}</p>
+  <figure>
+    {process_chart(efficiency, lambda value: f"{value:.0f}%", TEXT["aria_weak"],
+                   TEXT["tip_weak"], reference=100)}
+    <div class="legend">{setup_swatches()}<span class="key"><i class="line reference"></i>{TEXT["ideal"]}</span></div>
+  </figure>
+  <p class="lede">{TEXT['q6_p2'].format(**figures)}</p>
+  <figure>
+    {process_chart(rates, lambda value: f"{value:g}", TEXT["aria_throughput"], TEXT["tip_weak"],
+                   value_heading=TEXT["col_throughput"])}
+    <div class="legend">{setup_swatches()}</div>
+  </figure>
+  <div class="callout">
+    <h3>{TEXT['q6_callout_h']}</h3>
+    <p>{TEXT['q6_callout_p'].format(**figures)}</p>
+  </div>
+  <details><summary>{TEXT['table_weak']}</summary>
+  <div class="scroller">{html_table_body(headings, rows)}</div>
+  </details>
+</section>
+"""
+
+
 def build_page(grouped, steps, sizes, processes, constant_density):
     speedups = speedup_table(grouped, sizes, processes)
     imbalance = imbalance_table(grouped, sizes, processes)
@@ -682,6 +886,9 @@ def build_page(grouped, steps, sizes, processes, constant_density):
 
     speed_rows = [[number(a)] + [f"{speedups.get((a, c), 0):.2f}x" for c in processes]
                   for a in sizes]
+    rates = throughput_table(grouped, steps, sizes, processes)
+    throughput_rows = [[number(a)] + [f"{rates.get((a, c), 0) / 1e6:.2f}" for c in processes]
+                       for a in sizes]
     imbalance_rows = [[number(a)] + [f"{imbalance.get((a, c), 0):.2f}x" for c in processes]
                       for a in sizes]
     phase_rows = [[number(a)] + [f"{v:.1f}%" for v in phases[a]]
@@ -788,6 +995,9 @@ svg {{ width: 100%; height: auto; overflow: visible; display: block; }}
 .setup-dot.grown {{ fill: var(--raised); stroke: var(--ink-2); }}
 .key i.line {{ width: 18px; height: 2px; border-radius: 0; }}
 .key i.line.fixed {{ background: var(--ink); }}
+.reference {{ stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 1 4; }}
+.key i.line.reference {{ background: repeating-linear-gradient(90deg,
+  var(--ink-3) 0 1px, transparent 1px 5px); }}
 .key i.line.grown {{ background: repeating-linear-gradient(90deg,
   var(--ink-2) 0 6px, transparent 6px 10px); }}
 .legend {{ display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.85rem 0 0;
@@ -857,6 +1067,9 @@ code {{ font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   <details><summary>{TEXT['table_speedup']}</summary>
   <div class="scroller">{html_table_body([TEXT["col_agents"]] + [process_column(c) for c in processes], speed_rows)}</div>
   </details>
+  <details><summary>{TEXT['table_throughput']}</summary>
+  <div class="scroller">{html_table_body([TEXT["col_agents"]] + [process_column(c) for c in processes], throughput_rows)}</div>
+  </details>
 </section>
 
 <section>
@@ -891,6 +1104,7 @@ code {{ font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
 </section>
 
 {crowding_section((grouped, steps), constant_density)}
+{weak_section((grouped, steps), constant_density, processes)}
 <section>
   <span class="eyebrow">{TEXT['lim']}</span>
   <h2>{TEXT['lim_h']}</h2>
