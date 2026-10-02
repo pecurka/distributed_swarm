@@ -4,6 +4,12 @@
 //! after the agents standing in its own strip and simulates only those.
 //!
 //!     mpirun -n 4 ./target/release/swarm-dist [agents] [steps]
+//!                 [--world SIZE | --constant-density]
+//!
+//! The world is a fixed 1000x1000 box unless told otherwise, so adding agents
+//! makes the swarm denser rather than bigger. `--constant-density` grows the
+//! world with the swarm instead, which is what makes swarm size mean "bigger
+//! problem".
 //!
 //! Not finished. Agents near a strip's edge have neighbours belonging to the
 //! process next door and cannot see them yet, so they steer wrongly and the
@@ -20,7 +26,7 @@ use mpi::collective::SystemOperation;
 use mpi::traits::*;
 use swarm_core::{
     Agent, DEFAULT_SWARM_SIZE, Params, Partition, Recorder, RunResult, Timings,
-    agents_to_send_left, agents_to_send_right, append_result, configuration_report,
+    agents_to_send_left, agents_to_send_right, append_result, choose_world, configuration_report,
     decode_from_numbers, encode_to_numbers, scattered_swarm, sort_agents_by_destination,
     state_fingerprint, step_with_ghosts, timing_report,
 };
@@ -48,9 +54,32 @@ fn main() {
     let rank = world.rank();
     let process_count = world.size();
 
-    let params = Params::default();
     let swarm_size = numeric_argument(ARG_SWARM_SIZE).unwrap_or(DEFAULT_SWARM_SIZE);
     let steps = numeric_argument(ARG_STEPS).unwrap_or(DEFAULT_STEPS);
+
+    // `world` is already the MPI communicator here, so the simulation's world
+    // gets the longer name rather than shadowing it.
+    let defaults = Params::default();
+    let simulation_world = match named_world_size().and_then(|named_size| {
+        choose_world(
+            named_size,
+            constant_density_asked_for(),
+            swarm_size,
+            defaults.perception_radius,
+        )
+    }) {
+        Ok(simulation_world) => simulation_world,
+        Err(problem) => {
+            if rank == ROOT_RANK {
+                eprintln!("error: {problem}");
+            }
+            return;
+        }
+    };
+    let params = Params {
+        world: simulation_world,
+        ..defaults
+    };
     let record_every = flag_value("--every")
         .and_then(|value| value.parse().ok())
         .unwrap_or(DEFAULT_RECORD_EVERY);
@@ -223,6 +252,8 @@ fn main() {
                 runner: "distributed",
                 processes: process_count as usize,
                 agents: swarm_size,
+                world_x: params.world.x,
+                world_y: params.world.y,
                 steps,
                 simulating: std::time::Duration::from_secs_f64(simulating),
                 wall_clock,
@@ -486,4 +517,25 @@ fn flag_value(name: &str) -> Option<String> {
 /// Reads one number from a fixed position on the command line.
 fn numeric_argument(position: usize) -> Option<u64> {
     std::env::args().nth(position)?.parse().ok()
+}
+
+/// Reads `--world SIZE`, if it was given.
+///
+/// Fails rather than returning nothing when the flag is there without a number
+/// after it, so a typo cannot quietly fall back to the default world.
+fn named_world_size() -> Result<Option<f64>, String> {
+    if !std::env::args().any(|argument| argument == "--world") {
+        return Ok(None);
+    }
+    let value = flag_value("--world")
+        .ok_or_else(|| "--world needs a size, as in `--world 4000`".to_string())?;
+    value
+        .parse()
+        .map(Some)
+        .map_err(|_| format!("--world needs a number, not {value:?}"))
+}
+
+/// Whether `--constant-density` was given.
+fn constant_density_asked_for() -> bool {
+    std::env::args().any(|argument| argument == "--constant-density")
 }

@@ -12,7 +12,8 @@
 # Note what "bigger" means here: the world stays the same size, so more agents
 # means a denser swarm, not a larger one. Each agent then has more neighbours,
 # and the work grows roughly with the square of the swarm size rather than
-# linearly. That is worth saying plainly when reporting these numbers.
+# linearly. bench/sweep-density.sh is the same sweep with the world growing
+# along with the swarm.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -11,14 +11,19 @@ changed without touching them.
 Uses nothing outside Python's standard library.
 """
 
+import math
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from results import (  # noqa: E402  (path has to be set first)
+    CONSTANT_DENSITY,
+    FIXED_WORLD,
+    crowding_table,
     imbalance_table,
     load,
+    middle,
     phase_table,
     sizes_and_processes,
     speedup_table,
@@ -117,10 +122,48 @@ STRINGS = {
                   "cheaper here than it would be on a cluster, so the point at "
                   "which it starts to matter would arrive earlier on real "
                   "distributed hardware than these figures suggest.",
-        "lim_p3": "The world stays the same size as the swarm grows, so a larger "
-                  "swarm is also a denser one: each agent has more neighbours, and "
-                  "the work grows roughly with the square of the swarm size rather "
-                  "than linearly.",
+        "lim_p3": "Questions 2 to 4 use the fixed world, where a larger swarm is "
+                  "also a denser one. Question 5 shows that this changes how long "
+                  "a step takes far more than how well it splits.",
+        "meta_world": "questions 2&ndash;4 in a fixed 1000&times;1000 world",
+        "setup_fixed": "fixed 1000&times;1000 world",
+        "setup_grown": "world grown with the swarm",
+        "tip_setup": "{setup}, {agents} agents: {value}",
+        "agents_one_process": "agents (one process, time per step)",
+        "aria_crowding_time": "Time per step against swarm size, in the fixed world and with constant density",
+        "aria_crowding_speedup": "Speedup against swarm size, in the fixed world and with constant density",
+        "q5": "Question 5 &middot; crowding",
+        "q5_h": "Crowding makes every step slower, not harder to split",
+        "q5_p": "In the fixed world a bigger swarm is also a more crowded one. "
+                "Growing the world with the swarm keeps every agent at the same "
+                "number of neighbours as {smallest} agents in 1000&times;1000, so "
+                "the two can be told apart. With one process, each doubling of "
+                "the swarm makes a step {growth_fixed:.1f}&times; longer in the "
+                "fixed world and {growth_grown:.1f}&times; longer with room to "
+                "spread out. At {agents} agents that is {crowded_ms:.1f} ms against "
+                "{roomy_ms:.1f} ms a step: crowding alone makes it "
+                "{times_slower:.1f}&times; slower.",
+        "q5_p2": "Splitting the work helps about as much either way. At {count} "
+                 "processes and {agents} agents the speedup is "
+                 "{crowded_speedup:.2f}&times; in the fixed world and "
+                 "{roomy_speedup:.2f}&times; with constant density, and the two "
+                 "stay close at most sizes. How well the work splits follows how "
+                 "many agents there are, not how crowded they are.",
+        "q5_callout_h": "Why crowding changes the cost and not the speedup",
+        "q5_callout_p": "Crowding gives every agent more neighbours to look at, "
+                        "wherever it is, so every process&rsquo;s share of the "
+                        "work grows by about the same factor and the ratio between "
+                        "one process and ten stays put. What does change is how "
+                        "much computing there is to set the communication against: "
+                        "at {agents} agents communicating takes {crowded_comm:.1f}% "
+                        "of a step in the fixed world and {roomy_comm:.1f}% with "
+                        "constant density.",
+        "table_crowding": "Fixed world / constant density, at {count} processes",
+        "col_ms": "ms per step, 1 process",
+        "col_speedup": "speedup",
+        "col_imbalance": "imbalance",
+        "col_waiting": "waiting %",
+        "col_communicating": "communicating %",
         "table_speedup": "Speedup, every configuration",
         "table_phases": "Share of a step at {biggest} processes",
         "table_imbalance": "Average imbalance, every configuration",
@@ -215,9 +258,48 @@ STRINGS = {
                   "jeftinija nego što bi bila na klasteru, pa bi trenutak u kome "
                   "ona počinje da bude bitna na stvarnom distribuiranom hardveru "
                   "nastupio ranije nego što ove brojke pokazuju.",
-        "lim_p3": "Svet ostaje iste veličine dok roj raste, pa je veći roj ujedno i "
-                  "gušći: svaki agent ima više suseda, a posao raste približno sa "
-                  "kvadratom veličine roja umesto linearno.",
+        "lim_p3": "Pitanja 2 do 4 koriste nepromenljiv svet, u kome je veći roj "
+                  "ujedno i gušći. Pitanje 5 pokazuje da to mnogo više menja "
+                  "trajanje koraka nego to koliko se dobro posao deli.",
+        "meta_world": "pitanja 2&ndash;4 u nepromenljivom svetu 1000&times;1000",
+        "setup_fixed": "nepromenljiv svet 1000&times;1000",
+        "setup_grown": "svet koji raste sa rojem",
+        "tip_setup": "{setup}, {agents} agenata: {value}",
+        "agents_one_process": "agenti (jedan proces, vreme po koraku)",
+        "aria_crowding_time": "Vreme po koraku u odnosu na veličinu roja, u nepromenljivom svetu i pri stalnoj gustini",
+        "aria_crowding_speedup": "Ubrzanje u odnosu na veličinu roja, u nepromenljivom svetu i pri stalnoj gustini",
+        "q5": "Pitanje 5 &middot; gustina",
+        "q5_h": "Gustina usporava svaki korak, ali ne otežava podelu",
+        "q5_p": "U nepromenljivom svetu veći roj je ujedno i gušći. Kada svet "
+                "raste zajedno sa rojem, svaki agent ima isti broj suseda kao "
+                "{smallest} agenata u svetu 1000&times;1000, pa se ta dva efekta "
+                "mogu razdvojiti. Sa jednim procesom, svako udvostručavanje roja "
+                "produžava korak {growth_fixed:.1f}&times; u nepromenljivom svetu i "
+                "{growth_grown:.1f}&times; kada roj ima mesta da se raširi. Pri "
+                "{agents} agenata to je {crowded_ms:.1f} ms naspram "
+                "{roomy_ms:.1f} ms po koraku: sama gustina usporava korak "
+                "{times_slower:.1f}&times;.",
+        "q5_p2": "Podela posla pomaže približno isto u oba slučaja. Pri {count} "
+                 "procesa i {agents} agenata ubrzanje je "
+                 "{crowded_speedup:.2f}&times; u nepromenljivom svetu i "
+                 "{roomy_speedup:.2f}&times; pri stalnoj gustini, a te dve "
+                 "vrednosti ostaju bliske kod većine veličina. Koliko se dobro "
+                 "posao deli zavisi od broja agenata, a ne od toga koliko su "
+                 "zbijeni.",
+        "q5_callout_h": "Zašto gustina menja cenu, a ne ubrzanje",
+        "q5_callout_p": "Gustina daje svakom agentu više suseda, gde god da se "
+                        "nalazi, pa udeo posla svakog procesa raste približno "
+                        "istim faktorom i odnos između jednog i deset procesa "
+                        "ostaje isti. Ono što se menja je koliko računanja ima "
+                        "naspram komunikacije: pri {agents} agenata komunikacija "
+                        "zauzima {crowded_comm:.1f}% koraka u nepromenljivom "
+                        "svetu i {roomy_comm:.1f}% pri stalnoj gustini.",
+        "table_crowding": "Nepromenljiv svet / stalna gustina, pri {count} procesa",
+        "col_ms": "ms po koraku, 1 proces",
+        "col_speedup": "ubrzanje",
+        "col_imbalance": "neravnoteža",
+        "col_waiting": "čekanje %",
+        "col_communicating": "komunikacija %",
         "table_speedup": "Ubrzanje, sve konfiguracije",
         "table_phases": "Udeo koraka pri {biggest} procesa",
         "table_imbalance": "Prosečna neravnoteža, sve konfiguracije",
@@ -395,6 +477,91 @@ def scatter(speedups, imbalance, sizes, processes):
     return "\n".join(out)
 
 
+# The narrowest space, in chart units, that two axis labels like "10,000" need
+# between their centres so they do not overlap.
+MINIMUM_LABEL_GAP = 48
+
+
+def setup_chart(series, label_of_value, axis_label, aria, tip, logarithmic):
+    """One line per setup, against swarm size.
+
+    `series` is a list of (setup name, {agents: value}), fixed world first.
+    Swarm sizes run from 1000 to a million, so they are spaced by their
+    logarithm: an even step along the axis is the same multiple of agents.
+    Time per step spans as wide a range, so `logarithmic` spaces the values
+    the same way; speedup does not need it.
+
+    The two setups are told apart by line style, solid against dashed, rather
+    than colour. The colours on this page already stand for swarm sizes.
+    """
+    width, height = 620, 360
+    pad = {"left": 64, "top": 16, "right": 24, "bottom": 48}
+    left, top, right, bottom = axes(width, height, pad)
+    sizes = sorted({agents for _, values in series for agents in values})
+    values = [value for _, by_size in series for value in by_size.values()]
+
+    def x_of(agents):
+        if len(sizes) == 1:
+            return (left + right) / 2
+        span = math.log10(sizes[-1]) - math.log10(sizes[0])
+        return left + (math.log10(agents) - math.log10(sizes[0])) / span * (right - left)
+
+    if logarithmic:
+        lowest = 10 ** math.floor(math.log10(min(values)))
+        highest = 10 ** math.ceil(math.log10(max(values)))
+        ticks = [lowest * 10 ** power
+                 for power in range(round(math.log10(highest / lowest)) + 1)]
+
+        def y_of(value):
+            share = math.log10(value / lowest) / math.log10(highest / lowest)
+            return bottom - share * (bottom - top)
+    else:
+        highest = max(2.0, max(values) * 1.1)
+        ticks = list(range(0, int(highest) + 1))
+
+        def y_of(value):
+            return bottom - value / highest * (bottom - top)
+
+    out = [f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{aria}">']
+    for tick in ticks:
+        y = y_of(tick)
+        out.append(f'<line class="grid" x1="{left}" y1="{y:.1f}" x2="{right}" y2="{y:.1f}"/>')
+        out.append(f'<text class="tick" x="{left - 8}" y="{y + 4:.1f}" '
+                   f'text-anchor="end">{label_of_value(tick)}</text>')
+    # Sizes close together, like 8000 and 10000, would print on top of each
+    # other, so a label too near the last one is left off. Its point is still
+    # drawn and its tooltip still names it.
+    last_labelled = None
+    for agents in sizes:
+        x = x_of(agents)
+        if last_labelled is not None and x - last_labelled < MINIMUM_LABEL_GAP:
+            continue
+        out.append(f'<text class="tick" x="{x:.1f}" y="{bottom + 20}" '
+                   f'text-anchor="middle">{number(agents)}</text>')
+        last_labelled = x
+    out.append(f'<text class="axis" x="{(left + right) / 2:.0f}" y="{height - 8}" '
+               f'text-anchor="middle">{axis_label}</text>')
+
+    for style, (name, by_size) in zip(["fixed", "grown"], series):
+        points = [(x_of(agents), y_of(by_size[agents]), agents)
+                  for agents in sorted(by_size)]
+        path = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f} {y:.1f}"
+                        for i, (x, y, _) in enumerate(points))
+        out.append(f'<path class="setup {style}" d="{path}"/>')
+        for x, y, agents in points:
+            label = tip.format(setup=name, agents=number(agents),
+                               value=label_of_value(by_size[agents]))
+            out.append(f'<circle class="setup-dot {style}" cx="{x:.1f}" cy="{y:.1f}" '
+                       f'r="4" data-label="{label}"/>')
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+def setup_swatches():
+    return (f'<span class="key"><i class="line fixed"></i>{TEXT["setup_fixed"]}</span>'
+            f'<span class="key"><i class="line grown"></i>{TEXT["setup_grown"]}</span>')
+
+
 # ------------------------------------------------------------------ page ----
 
 def swatches(names, slots):
@@ -412,7 +579,89 @@ def html_table_body(headings, rows):
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
-def build_page(grouped, steps, sizes, processes):
+def milliseconds_per_step(grouped, steps):
+    """One process, for each swarm size: how long a step takes with no splitting."""
+    return {key[2]: 1000 * middle(runs, "simulating_seconds") / steps
+            for key, runs in grouped.items()
+            if key[0] == "sequential" and not key[3]}
+
+
+def crowding_section(fixed_world, constant_density):
+    """The section comparing the fixed world with constant density.
+
+    Empty when there are no constant-density runs to compare against.
+    """
+    table, count = crowding_table(fixed_world, constant_density)
+    if not table:
+        return ""
+    names = [TEXT["setup_fixed"], TEXT["setup_grown"]]
+    timing = [(name, milliseconds_per_step(grouped, steps))
+              for name, (grouped, steps) in zip(names, [fixed_world, constant_density])]
+    scaling = []
+    for name, (grouped, _) in zip(names, [fixed_world, constant_density]):
+        sizes, _ = sizes_and_processes(grouped)
+        at_count = speedup_table(grouped, sizes, [count])
+        scaling.append((name, {agents: value for (agents, _), value in at_count.items()}))
+
+    # How many times longer a step takes each time the swarm doubles, over the
+    # sizes measured both ways. About 2 means the work grows in step with the
+    # swarm; about 4 would mean it grows with the square.
+    shared = sorted(set(timing[0][1]) & set(timing[1][1]))
+    doublings = math.log2(shared[-1] / shared[0])
+    growth_fixed, growth_grown = (
+        (by_size[shared[-1]] / by_size[shared[0]]) ** (1 / doublings)
+        for _, by_size in timing)
+
+    # The largest size measured both ways carries the headline numbers.
+    largest = max(table)
+    crowded, roomy = table[largest]
+    rows = []
+    for agents, (fixed, grown) in table.items():
+        rows.append([number(agents)] + [
+            f"{fixed[key]:{shape}} / {grown[key]:{shape}}"
+            for key, shape in [("milliseconds_per_step", ".1f"), ("speedup", ".2f"),
+                               ("imbalance", ".2f"), ("waiting", ".1f"),
+                               ("communicating", ".1f")]])
+    headings = [TEXT["col_agents"], TEXT["col_ms"], TEXT["col_speedup"],
+                TEXT["col_imbalance"], TEXT["col_waiting"], TEXT["col_communicating"]]
+    figures = dict(agents=number(largest), count=count,
+                   crowded_ms=crowded["milliseconds_per_step"],
+                   roomy_ms=roomy["milliseconds_per_step"],
+                   times_slower=crowded["milliseconds_per_step"] / roomy["milliseconds_per_step"],
+                   crowded_speedup=crowded["speedup"], roomy_speedup=roomy["speedup"],
+                   crowded_imbalance=crowded["imbalance"], roomy_imbalance=roomy["imbalance"],
+                   crowded_comm=crowded["communicating"], roomy_comm=roomy["communicating"],
+                   growth_fixed=growth_fixed, growth_grown=growth_grown,
+                   smallest=number(shared[0]))
+    return f"""
+<section>
+  <span class="eyebrow">{TEXT['q5']}</span>
+  <h2>{TEXT['q5_h']}</h2>
+  <p class="lede">{TEXT['q5_p'].format(**figures)}</p>
+  <figure>
+    {setup_chart(timing, lambda value: f"{value:g} ms", TEXT["agents_one_process"],
+                 TEXT["aria_crowding_time"], TEXT["tip_setup"], logarithmic=True)}
+    <div class="legend">{setup_swatches()}</div>
+  </figure>
+  <p class="lede">{TEXT['q5_p2'].format(**figures)}</p>
+  <figure>
+    {setup_chart(scaling, lambda value: f"{value:.2f}x" if value % 1 else f"{value:.0f}x",
+                 TEXT["agents_at"].format(count=count), TEXT["aria_crowding_speedup"],
+                 TEXT["tip_setup"], logarithmic=False)}
+    <div class="legend">{setup_swatches()}</div>
+  </figure>
+  <div class="callout">
+    <h3>{TEXT['q5_callout_h']}</h3>
+    <p>{TEXT['q5_callout_p'].format(**figures)}</p>
+  </div>
+  <details><summary>{TEXT['table_crowding'].format(count=count)}</summary>
+  <div class="scroller">{html_table_body(headings, rows)}</div>
+  </details>
+</section>
+"""
+
+
+def build_page(grouped, steps, sizes, processes, constant_density):
     speedups = speedup_table(grouped, sizes, processes)
     imbalance = imbalance_table(grouped, sizes, processes)
     biggest = max(processes)
@@ -531,6 +780,16 @@ svg {{ width: 100%; height: auto; overflow: visible; display: block; }}
 .series {{ fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }}
 .dot {{ stroke: var(--surface); stroke-width: 2; }}
 {series_css}
+.setup {{ fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }}
+.setup.fixed {{ stroke: var(--ink); }}
+.setup.grown {{ stroke: var(--ink-2); stroke-dasharray: 6 4; }}
+.setup-dot {{ stroke-width: 2; }}
+.setup-dot.fixed {{ fill: var(--ink); stroke: var(--surface); }}
+.setup-dot.grown {{ fill: var(--raised); stroke: var(--ink-2); }}
+.key i.line {{ width: 18px; height: 2px; border-radius: 0; }}
+.key i.line.fixed {{ background: var(--ink); }}
+.key i.line.grown {{ background: repeating-linear-gradient(90deg,
+  var(--ink-2) 0 6px, transparent 6px 10px); }}
 .legend {{ display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin: 0.85rem 0 0;
   font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   font-size: 0.75rem; color: var(--ink-2); }}
@@ -573,6 +832,7 @@ code {{ font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
     <span>{TEXT['meta_processes'].format(first=processes[0], last=biggest)}</span>
     <span>{TEXT['meta_steps'].format(steps=steps)}</span>
     <span>{TEXT['meta_medians']}</span>
+    <span>{TEXT['meta_world']}</span>
   </div>
 </header>
 
@@ -630,6 +890,7 @@ code {{ font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   </details>
 </section>
 
+{crowding_section((grouped, steps), constant_density)}
 <section>
   <span class="eyebrow">{TEXT['lim']}</span>
   <h2>{TEXT['lim_h']}</h2>
@@ -666,10 +927,11 @@ def main():
         # has to be labelled in Serbian too.
         TEXT = STRINGS["sr"]
 
-    grouped, steps = load()
+    grouped, steps = load(setup=FIXED_WORLD)
+    constant_density = load(setup=CONSTANT_DENSITY)
     sizes, processes = sizes_and_processes(grouped)
     destination = Path(arguments[0]) if arguments else Path("data/analysis.html")
-    destination.write_text(build_page(grouped, steps, sizes, processes))
+    destination.write_text(build_page(grouped, steps, sizes, processes, constant_density))
     print(f"charts written to {destination}")
 
 

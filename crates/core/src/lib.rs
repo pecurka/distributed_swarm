@@ -43,3 +43,4 @@ pub use world::geometry::{toroidal_delta, wrap};
 pub use world::params::Params;
 pub use world::swarm_init::{lattice_swarm, scattered_swarm};
 pub use world::vector2d::Vector2D;
+pub use world::world_size::{choose_world, world_for_constant_density};

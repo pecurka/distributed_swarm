@@ -6,6 +6,7 @@
 //! - [`params`]     the settings for a run
 //! - [`constants`]  the default values for those settings
 //! - [`swarm_init`] building the swarm to start with
+//! - [`world_size`] how big the world should be for a run
 
 pub mod agent;
 pub mod constants;
@@ -13,3 +14,4 @@ pub mod geometry;
 pub mod params;
 pub mod swarm_init;
 pub mod vector2d;
+pub mod world_size;

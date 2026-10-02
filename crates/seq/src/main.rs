@@ -4,14 +4,20 @@
 //! also saves positions to a file so the run can be drawn afterwards.
 //!
 //!     swarm-seq [agents] [steps] [--dump FILE] [--every N]
+//!                [--world SIZE | --constant-density]
+//!
+//! The world is a fixed 1000x1000 box unless told otherwise, so adding agents
+//! makes the swarm denser rather than bigger. `--constant-density` grows the
+//! world with the swarm instead, which is what makes swarm size mean "bigger
+//! problem".
 
 use std::path::PathBuf;
 use std::time::Instant;
 
 use swarm_core::{
-    DEFAULT_SWARM_SIZE, Params, Recorder, RunResult, Timings, append_result, configuration_report,
-    local_alignment, polarisation, progress_heading, progress_line, scattered_swarm,
-    state_fingerprint, step,
+    DEFAULT_SWARM_SIZE, Params, Recorder, RunResult, Timings, append_result, choose_world,
+    configuration_report, local_alignment, polarisation, progress_heading, progress_line,
+    scattered_swarm, state_fingerprint, step,
 };
 
 /// Where the swarm size sits on the command line. Index 0 is the program itself.
@@ -27,9 +33,26 @@ const REPORT_EVERY: u64 = 50;
 const DEFAULT_RECORD_EVERY: u64 = 5;
 
 fn main() {
-    let params = Params::default();
     let swarm_size = numeric_argument(ARG_SWARM_SIZE).unwrap_or(DEFAULT_SWARM_SIZE);
     let steps = numeric_argument(ARG_STEPS).unwrap_or(DEFAULT_STEPS);
+
+    let defaults = Params::default();
+    let world = match named_world_size().and_then(|named_size| {
+        choose_world(
+            named_size,
+            constant_density_asked_for(),
+            swarm_size,
+            defaults.perception_radius,
+        )
+    }) {
+        Ok(world) => world,
+        Err(problem) => {
+            eprintln!("error: {problem}");
+            std::process::exit(1);
+        }
+    };
+    let params = Params { world, ..defaults };
+
     let record_every = flag_value("--every")
         .and_then(|value| value.parse().ok())
         .unwrap_or(DEFAULT_RECORD_EVERY);
@@ -129,6 +152,8 @@ fn main() {
                 runner: "sequential",
                 processes: 1,
                 agents: agents.len() as u64,
+                world_x: params.world.x,
+                world_y: params.world.y,
                 steps,
                 simulating,
                 wall_clock,
@@ -161,4 +186,25 @@ fn flag_value(name: &str) -> Option<String> {
     let arguments: Vec<String> = std::env::args().collect();
     let position = arguments.iter().position(|argument| argument == name)?;
     arguments.get(position + 1).cloned()
+}
+
+/// Reads `--world SIZE`, if it was given.
+///
+/// Fails rather than returning nothing when the flag is there without a number
+/// after it, so a typo cannot quietly fall back to the default world.
+fn named_world_size() -> Result<Option<f64>, String> {
+    if !std::env::args().any(|argument| argument == "--world") {
+        return Ok(None);
+    }
+    let value = flag_value("--world")
+        .ok_or_else(|| "--world needs a size, as in `--world 4000`".to_string())?;
+    value
+        .parse()
+        .map(Some)
+        .map_err(|_| format!("--world needs a number, not {value:?}"))
+}
+
+/// Whether `--constant-density` was given.
+fn constant_density_asked_for() -> bool {
+    std::env::args().any(|argument| argument == "--constant-density")
 }

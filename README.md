@@ -73,7 +73,8 @@ itself.
 Cargo.toml       workspace
 
 crates/core/     the model — grouped by what each part is for
-  world/           vector2d, geometry, agent, params, constants, swarm_init
+  world/           vector2d, geometry, agent, params, constants, swarm_init,
+                   world_size (how big the world is for a run)
   neighbours/      brute_force (the slow, obvious search), grid (the fast one)
   behaviour/       steering (the three rules), simulation (one step)
   splitting/       partition (who owns which strip), borders (what is copied
@@ -83,7 +84,7 @@ crates/core/     the model — grouped by what each part is for
 crates/seq/      sequential baseline
 crates/dist/     distributed runner (MPI, via rsmpi)
 
-bench/           sweep.sh, sweep-sizes.sh — the measurement runs
+bench/           sweep.sh, sweep-sizes.sh, sweep-density.sh — the measurement runs
 analysis/        render.py  a recorded run as a page or an SVG
                  results.py the measurement tables
                  report.py  the charts, English and Serbian
@@ -112,6 +113,22 @@ cargo run --release -p swarm-seq -- 500 300       # 500 agents, 300 steps
 mpirun -n 4 ./target/release/swarm-dist           # 4 processes, defaults
 mpirun -n 8 ./target/release/swarm-dist 2000 400  # 8 processes, 2000 agents
 ```
+
+The world is a fixed 1000x1000 box unless you say otherwise, so adding agents
+makes the swarm denser rather than bigger. Both runners take two flags to change
+that:
+
+```bash
+cargo run --release -p swarm-seq -- 100000 400 --constant-density
+cargo run --release -p swarm-seq -- 4000 400 --world 2000
+```
+
+`--constant-density` sizes the world from the swarm so each agent keeps roughly
+the same number of neighbours, which is what makes swarm size mean "bigger
+problem" rather than "more crowded". `--world` sets a square world explicitly
+and wins if both are given. A million agents takes about 890ms a step at
+constant density and an estimated 190s a step in the fixed world, because the
+fixed world makes the work grow with the square of the swarm size.
 
 `--release` matters for anything you intend to measure. The distributed binary
 must be launched through `mpirun` rather than `cargo run`, since `mpirun` starts
@@ -181,17 +198,22 @@ a median.
 ```bash
 bench/sweep.sh                              # strong and weak scaling, one swarm size
 bench/sweep-sizes.sh                        # strong scaling across swarm sizes
+bench/sweep-density.sh                      # the same, holding crowding fixed
 REPEATS=3 STEPS=200 bench/sweep.sh          # a quicker version
 
-python3 analysis/results.py                 # the tables
+python3 analysis/results.py                 # the tables, both setups and the comparison
 python3 analysis/report.py data/analysis.html
 python3 analysis/report.py --serbian data/analysis-sr.html
 ```
 
-Every run appends one row to `data/results.csv`. Rows accumulate and are never
-overwritten, so an interrupted sweep loses nothing. Every row carries the
-fingerprint of the swarm the run ended with: a fast result and a slow one can
-only be compared if they computed the same thing.
+Every run appends one row to `data/results.csv`. Rows
+accumulate and are never overwritten, so an interrupted sweep loses nothing.
+Every row carries the fingerprint of the swarm the run ended with: a fast result
+and a slow one can only be compared if they computed the same thing. Every row
+also carries the world size, since the same swarm in a smaller world is a denser
+one doing more work. The analysis sorts runs into the fixed world and constant
+density by it and never puts the two in one median. A world set by hand with
+`--world` belongs to neither and is left out.
 
 Raw measurement output is committed rather than summarised, so every number and
 figure in the thesis can be traced back to the run that produced it.
@@ -203,15 +225,16 @@ above 10. Past that, processes share cores and the timings measure the operating
 system moving processes around rather than the simulation. The sweeps refuse to
 run oversubscribed rather than quietly producing numbers that mean nothing.
 
-This is a limitation worth stating plainly: these are processes on one machine,
-sharing a memory bus, not separate machines with a network between them.
-Communication is therefore cheaper here than it would be on a cluster, so the
-point at which communication starts to dominate arrives later in these
-measurements than it would on real distributed hardware.
+These are processes on one machine sharing a memory bus, not separate machines
+with a network between them. Communication is therefore cheaper here than it
+would be on a cluster, so the point at which communication starts to dominate
+arrives later in these measurements than it would on real distributed hardware.
 
-The world stays the same size as the swarm grows, so a larger swarm is also a
-denser one: each agent has more neighbours, and the work grows roughly with the
-square of the swarm size rather than linearly.
+In the fixed world a larger swarm is also a denser one: each agent has more
+neighbours, and the work grows roughly with the square of the swarm size rather
+than linearly. That mixes up "bigger problem" with "denser flock". The
+measurements cover both setups at the same swarm sizes, and the report has a
+section comparing them, so what crowding changes can be read off directly.
 
 ## Thesis
 

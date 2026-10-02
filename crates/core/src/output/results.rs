@@ -21,6 +21,14 @@ pub struct RunResult<'a> {
     pub runner: &'a str,
     pub processes: usize,
     pub agents: u64,
+    /// Size of the world the run used.
+    ///
+    /// Recorded because the same number of agents in a smaller world is a
+    /// denser swarm, which is a different simulation and a different amount of
+    /// work. Without this column two such runs look identical in the results
+    /// file and would be averaged together.
+    pub world_x: f64,
+    pub world_y: f64,
     pub steps: u64,
     /// The simulation and nothing else. This is the number speedup is worked
     /// out from.
@@ -51,9 +59,10 @@ pub struct RunResult<'a> {
     pub fingerprint: u64,
 }
 
-const HEADER: &str = "runner,processes,agents,steps,simulating_seconds,wall_clock_seconds,\
-computing_seconds,waiting_seconds,communicating_seconds,finishing_seconds,measured_phases,\
-smallest_process_load,largest_process_load,average_imbalance,worst_imbalance,fingerprint";
+const HEADER: &str = "runner,processes,agents,world_x,world_y,steps,simulating_seconds,\
+wall_clock_seconds,computing_seconds,waiting_seconds,communicating_seconds,finishing_seconds,\
+measured_phases,smallest_process_load,largest_process_load,average_imbalance,worst_imbalance,\
+fingerprint";
 
 /// Adds one row, writing the header first if the file is new.
 pub fn append_result(path: &Path, result: &RunResult) -> Result<()> {
@@ -69,10 +78,12 @@ pub fn append_result(path: &Path, result: &RunResult) -> Result<()> {
 /// One row, without writing it anywhere. Split out so it can be tested.
 pub fn format_row(result: &RunResult) -> String {
     format!(
-        "{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{:.4},{:.4},{:016x}",
+        "{},{},{},{:.4},{:.4},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{},{:.4},{:.4},{:016x}",
         result.runner,
         result.processes,
         result.agents,
+        result.world_x,
+        result.world_y,
         result.steps,
         result.simulating.as_secs_f64(),
         result.wall_clock.as_secs_f64(),
@@ -99,6 +110,8 @@ mod tests {
             runner: "distributed",
             processes: 4,
             agents: 1000,
+            world_x: 1000.0,
+            world_y: 1000.0,
             steps: 300,
             simulating: Duration::from_millis(1500),
             wall_clock: Duration::from_millis(1600),
@@ -143,6 +156,20 @@ mod tests {
         assert_eq!(lines[0], HEADER);
         assert_eq!(lines[1], lines[2]);
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn the_world_is_written_so_two_densities_can_be_told_apart() {
+        // Same swarm, different world, so these are different simulations
+        // doing different amounts of work. The rows must not look alike.
+        let mut crowded = example();
+        crowded.world_x = 1000.0;
+        crowded.world_y = 1000.0;
+        let mut roomy = example();
+        roomy.world_x = 31622.7766;
+        roomy.world_y = 31622.7766;
+        assert_ne!(format_row(&crowded), format_row(&roomy));
+        assert!(format_row(&roomy).contains("31622.7766"));
     }
 
     #[test]
